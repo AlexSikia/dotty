@@ -57,6 +57,7 @@ class Compiler {
            new ClassTags,
            new ElimByName,
            new ResolveSuper),
+      List(new TypeSpecializer),
       List(new Erasure),
       List(new ElimErasedValueType,
            new VCInline,
