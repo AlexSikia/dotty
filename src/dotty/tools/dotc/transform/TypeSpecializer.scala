@@ -42,7 +42,7 @@ class TypeSpecializer extends MiniPhaseTransform {
         val origVParams = tree.vparamss.flatten.map(_.symbol)
         println(s"specializing ${tree.symbol} for Tparams: ${origTParams.length}")
 
-        def specialize(instatiations: collection.mutable.ListBuffer[Type], names: collection.mutable.ArrayBuffer[String]): Tree = {
+        def specialize(instatiations: List[Type], names: List[String]): Tree = {
 
           val newSym = ctx.newSymbol(tree.symbol.owner, (tree.name + names.mkString).toTermName, tree.symbol.flags | Flags.Synthetic, poly.instantiate(instatiations.toList))
           polyDefDef(newSym, { tparams => vparams => {
@@ -58,29 +58,25 @@ class TypeSpecializer extends MiniPhaseTransform {
           })
         }
 
-        def generateSpecializations(remainingTParams: List[TypeDef])
-                                  (instatiated: ArrayBuffer[TypeDef], instatiations: ListBuffer[Type],
-                                    names: ArrayBuffer[String]): Iterable[Tree] = {
+        def generateSpecializations(remainingTParams: List[TypeDef], remainingBounds: List[TypeBounds])
+                                  (instatiations: List[Type],
+                                    names: List[String]): Iterable[Tree] = {
           if (remainingTParams.nonEmpty) {
             val typeToSpecialize = remainingTParams.head
-            specialisedTypes.flatMap { tpnme =>
+            val bounds = remainingBounds.head
+            specialisedTypes.filter{ tpnme =>
+              bounds.contains(tpnme._1)
+            }.flatMap { tpnme =>
               val tpe = tpnme._1
               val nme = tpnme._2
-              instatiated.+=(typeToSpecialize)
-              instatiations.+=(tpe)
-              names.+=(nme)
-              val r = generateSpecializations(remainingTParams.tail)(instatiated, instatiations, names)
-              instatiated.drop(1)
-              instatiations.drop(1)
-              names.drop(1)
-              r
+              generateSpecializations(remainingTParams.tail, remainingBounds.tail)(tpe :: instatiations, nme :: names)
             }
           } else
-            List(specialize(instatiations, names))
+            List(specialize(instatiations.reverse, names.reverse))
         }
 
 
-        Thicket(tree :: generateSpecializations(tree.tparams)(ArrayBuffer.empty, ListBuffer.empty, ArrayBuffer.empty).toList)
+        Thicket(tree :: generateSpecializations(tree.tparams, poly.paramBounds)(List.empty, List.empty).toList)
       }
       case _ => tree
     }
