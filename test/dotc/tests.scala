@@ -15,7 +15,7 @@ class tests extends CompilerTest {
 
   implicit val defaultOptions = noCheckOptions ++ List(
       "-Yno-deep-subtypes",
-      "-Ycheck:tailrec,resolveSuper,mixin,restoreScopes",
+      "-Ycheck:specialize,tailrec,resolveSuper,mixin,restoreScopes",
       "-d", "./out/"
   )
 

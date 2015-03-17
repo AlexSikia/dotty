@@ -11,7 +11,7 @@ import scala.collection.mutable.{ListBuffer, ArrayBuffer}
 
 class TypeSpecializer extends MiniPhaseTransform {
   
-  override def phaseName = "Type Specializer"
+  override def phaseName = "specialize"
 
   final val maxTparamsToSpecialize = 2
   
