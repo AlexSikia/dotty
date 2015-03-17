@@ -143,48 +143,4 @@ class tests extends CompilerTest {
 
 
   @Test def dotty = compileDir(dottyDir, "tools", "-deep" :: allowDeepSubtypes ++ twice) // note the -deep argument
-
-
-  @Test def dotc_ast = compileDir(dotcDir, "ast")
-  @Test def dotc_config = compileDir(dotcDir, "config")
-  @Test def dotc_core = compileDir(dotcDir, "core")("-Yno-double-bindings" :: allowDeepSubtypes)// twice omitted to make tests run faster
-
-// This directory doesn't exist anymore
-//  @Test def dotc_core_pickling = compileDir(coreDir, "pickling")(allowDeepSubtypes)// twice omitted to make tests run faster
-
-  @Test def dotc_transform = compileDir(dotcDir, "transform")// twice omitted to make tests run faster
-
-  @Test def dotc_parsing = compileDir(dotcDir, "parsing") // twice omitted to make tests run faster
-
-  @Test def dotc_printing = compileDir(dotcDir, "printing") // twice omitted to make tests run faster
-
-  @Test def dotc_reporting = compileDir(dotcDir, "reporting") // twice omitted to make tests run faster
-
-  @Test def dotc_typer = compileDir(dotcDir, "typer")// twice omitted to make tests run faster
-    // error: error while loading Checking$$anon$2$,
-    // class file 'target/scala-2.11/dotty_2.11-0.1-SNAPSHOT.jar(dotty/tools/dotc/typer/Checking$$anon$2.class)'
-    // has location not matching its contents: contains class $anon
-
-  @Test def dotc_util = compileDir(dotcDir, "util") // twice omitted to make tests run faster
-
-  @Test def tools_io = compileDir(toolsDir, "io") // inner class has symbol <none>
-
-  @Test def helloWorld = compileFile(posDir, "HelloWorld")
-  @Test def labels = compileFile(posDir, "Labels", twice)
-  //@Test def tools = compileDir(dottyDir, "tools", "-deep" :: Nil)(allowDeepSubtypes)
-
-  @Test def testNonCyclic = compileList("testNonCyclic", List(
-      dotcDir + "CompilationUnit.scala",
-      coreDir + "Types.scala",
-      dotcDir + "ast/Trees.scala"
-    ), List("-Xprompt") ++ staleSymbolError ++ twice)
-
-  @Test def testIssue_34 = compileList("testIssue_34", List(
-      dotcDir + "config/Properties.scala",
-      dotcDir + "config/PathResolver.scala"
-    ), List(/* "-Ylog:frontend", */ "-Xprompt") ++ staleSymbolError ++ twice)
-
-  val javaDir = "./tests/pos/java-interop/"
-  @Test def java_all = compileFiles(javaDir, twice)
-  //@Test def dotc_compilercommand = compileFile(dotcDir + "config/", "CompilerCommand")
 }
