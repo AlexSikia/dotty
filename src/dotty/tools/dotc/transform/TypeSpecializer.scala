@@ -7,6 +7,7 @@ import dotty.tools.dotc.core.Flags
 import dotty.tools.dotc.core.Types._
 import dotty.tools.dotc.transform.TreeTransforms.{TransformerInfo, MiniPhaseTransform}
 import dotty.tools.dotc.core.Decorators._
+import scala.collection.mutable
 import scala.collection.mutable.{ListBuffer, ArrayBuffer}
 
 class TypeSpecializer extends MiniPhaseTransform {
@@ -14,7 +15,15 @@ class TypeSpecializer extends MiniPhaseTransform {
   override def phaseName = "specialize"
 
   final val maxTparamsToSpecialize = 2
-  
+
+  private val specializationRequests: mutable.HashMap[Symbol, List[List[Type]]] = mutable.HashMap.empty
+
+  def registerSpecializationRequest(method: Symbol)(arguments: List[Type])(implicit ctx: Context) = {
+    assert(ctx.phaseId <= this.period.phaseId)
+    val prev = specializationRequests.getOrElse(method, List.empty)
+    specializationRequests.put(method, arguments :: prev)
+  }
+
   private final def specialisedTypes(implicit ctx: Context) =
     Map(ctx.definitions.ByteType -> "$mcB$sp",
     ctx.definitions.BooleanType -> "$mcZ$sp",
@@ -25,7 +34,19 @@ class TypeSpecializer extends MiniPhaseTransform {
     ctx.definitions.DoubleType -> "$mcD$sp",
     ctx.definitions.CharType -> "$mcC$sp",
     ctx.definitions.UnitType -> "$mcV$sp")
-  
+
+  def shouldSpecializeForAll(sym: Symbol)(implicit ctx: Context): Boolean = {
+    // either -Yspecialize:all is given, or sym has @specialize annotation
+    ???
+  }
+
+  def shouldSpecializeForSome(sym: Symbol)(implicit ctx: Context): List[List[Type]] = {
+    specializationRequests.getOrElse(sym, Nil)
+  }
+
+
+
+
   override def transformDefDef(tree: DefDef)(implicit ctx: Context, info: TransformerInfo): Tree = {
 
     def rewireType(tpe: Type) = tpe match {
@@ -36,8 +57,7 @@ class TypeSpecializer extends MiniPhaseTransform {
     tree.tpe.widen match {
         
       case poly: PolyType if !(tree.symbol.isPrimaryConstructor
-                               || (tree.symbol is Flags.Label)
-                               || (tree.tparams.length > maxTparamsToSpecialize)) => {
+                               || (tree.symbol is Flags.Label)) => {
         val origTParams = tree.tparams.map(_.symbol)
         val origVParams = tree.vparamss.flatten.map(_.symbol)
         println(s"specializing ${tree.symbol} for Tparams: ${origTParams.length}")
