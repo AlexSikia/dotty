@@ -3,12 +3,11 @@ package dotty.tools.dotc.transform
 import dotty.tools.dotc.ast.TreeTypeMap
 import dotty.tools.dotc.ast.tpd._
 import dotty.tools.dotc.core.Contexts.Context
-import dotty.tools.dotc.core.Flags
+import dotty.tools.dotc.core.{Symbols, Flags}
 import dotty.tools.dotc.core.Types._
 import dotty.tools.dotc.transform.TreeTransforms.{TransformerInfo, MiniPhaseTransform}
 import dotty.tools.dotc.core.Decorators._
 import scala.collection.mutable
-import scala.collection.mutable.{ListBuffer, ArrayBuffer}
 
 class TypeSpecializer extends MiniPhaseTransform {
   
@@ -35,9 +34,9 @@ class TypeSpecializer extends MiniPhaseTransform {
     ctx.definitions.CharType -> "$mcC$sp",
     ctx.definitions.UnitType -> "$mcV$sp")
 
-  def shouldSpecializeForAll(sym: Symbol)(implicit ctx: Context): Boolean = {
+  def shouldSpecializeForAll(sym: Symbols.Symbol)(implicit ctx: Context): Boolean = {
     // either -Yspecialize:all is given, or sym has @specialize annotation
-    ???
+    sym.denot.hasAnnotation(ctx.definitions.specializedAnnot) || (ctx.settings.Yspecialize.value == "all")
   }
 
   def shouldSpecializeForSome(sym: Symbol)(implicit ctx: Context): List[List[Type]] = {
@@ -49,11 +48,6 @@ class TypeSpecializer extends MiniPhaseTransform {
 
   override def transformDefDef(tree: DefDef)(implicit ctx: Context, info: TransformerInfo): Tree = {
 
-    def rewireType(tpe: Type) = tpe match {
-        case tpe: TermRef => tpe.widen
-        case _ => tpe
-      }
-    
     tree.tpe.widen match {
         
       case poly: PolyType if !(tree.symbol.isPrimaryConstructor
