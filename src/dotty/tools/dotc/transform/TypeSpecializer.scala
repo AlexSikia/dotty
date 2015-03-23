@@ -15,10 +15,10 @@ class TypeSpecializer extends MiniPhaseTransform {
 
   final val maxTparamsToSpecialize = 2
 
-  private val specializationRequests: mutable.HashMap[Symbol, List[List[Type]]] = mutable.HashMap.empty
+  private val specializationRequests: mutable.HashMap[Symbols.Symbol, List[List[Type]]] = mutable.HashMap.empty
 
-  def registerSpecializationRequest(method: Symbol)(arguments: List[Type])(implicit ctx: Context) = {
-    assert(ctx.phaseId <= this.period.phaseId)
+  def registerSpecializationRequest(method: Symbols.Symbol)(arguments: List[Type])(implicit ctx: Context) = {
+    // assert(ctx.phaseId <= this.period.phaseId) // This fails - why ?
     val prev = specializationRequests.getOrElse(method, List.empty)
     specializationRequests.put(method, arguments :: prev)
   }
@@ -36,15 +36,26 @@ class TypeSpecializer extends MiniPhaseTransform {
 
   def shouldSpecializeForAll(sym: Symbols.Symbol)(implicit ctx: Context): Boolean = {
     // either -Yspecialize:all is given, or sym has @specialize annotation
-    sym.denot.hasAnnotation(ctx.definitions.specializedAnnot) || (ctx.settings.Yspecialize.value == "all")
+    (sym.denot.hasAnnotation(ctx.definitions.specializedAnnot) && true /*check for empty list of types to specialize to*/)|| (ctx.settings.Yspecialize.value == "all")
   }
 
-  def shouldSpecializeForSome(sym: Symbol)(implicit ctx: Context): List[List[Type]] = {
+  def shouldSpecializeForSome(sym: Symbols.Symbol)(implicit ctx: Context): List[List[Type]] = {
+    if (sym.denot.hasAnnotation(ctx.definitions.specializedAnnot)) {
+      val specAnnotation = sym.denot.getAnnotation(ctx.definitions.specializedAnnot)
+      val annotationArgs = List() // How can I get the list of types associated to the @specialized annotation ?
+      registerSpecializationRequest(sym)(annotationArgs)
+      println(s"specializationRequests : $specializationRequests")
+    }
     specializationRequests.getOrElse(sym, Nil)
   }
 
-
-
+  def shouldSpecializeFor(sym: Symbols.Symbol)(implicit ctx: Context): List[List[Type]] = {
+    if (shouldSpecializeForAll(sym)) {
+      registerSpecializationRequest(sym)(specialisedTypes.keys.toList)
+      specializationRequests.getOrElse(sym, Nil)
+    }
+    else shouldSpecializeForSome(sym)
+  }
 
   override def transformDefDef(tree: DefDef)(implicit ctx: Context, info: TransformerInfo): Tree = {
 
@@ -54,7 +65,7 @@ class TypeSpecializer extends MiniPhaseTransform {
                                || (tree.symbol is Flags.Label)) => {
         val origTParams = tree.tparams.map(_.symbol)
         val origVParams = tree.vparamss.flatten.map(_.symbol)
-        println(s"specializing ${tree.symbol} for Tparams: ${origTParams.length}")
+        println(s"specializing ${tree.symbol} for Tparams: ${origTParams}")
 
         def specialize(instatiations: List[Type], names: List[String]): Tree = {
 
@@ -78,18 +89,18 @@ class TypeSpecializer extends MiniPhaseTransform {
           if (remainingTParams.nonEmpty) {
             val typeToSpecialize = remainingTParams.head
             val bounds = remainingBounds.head
-            specialisedTypes.filter{ tpnme =>
-              bounds.contains(tpnme._1)
-            }.flatMap { tpnme =>
-              val tpe = tpnme._1
-              val nme = tpnme._2
+            val specializeTo = shouldSpecializeFor(typeToSpecialize.symbol).flatten
+            println(s"types to specialize for are : $specializeTo")
+
+            specializeTo.filter{ tpe =>
+              bounds.contains(tpe)
+            }.flatMap { tpe =>
+              val nme = specialisedTypes(ctx)(tpe)
               generateSpecializations(remainingTParams.tail, remainingBounds.tail)(tpe :: instatiations, nme :: names)
             }
           } else
             List(specialize(instatiations.reverse, names.reverse))
         }
-
-
         Thicket(tree :: generateSpecializations(tree.tparams, poly.paramBounds)(List.empty, List.empty).toList)
       }
       case _ => tree

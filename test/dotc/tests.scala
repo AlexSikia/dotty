@@ -33,7 +33,7 @@ class tests extends CompilerTest {
   val negDir = "./tests/neg/"
   val newDir = "./tests/new/"
   val dotcDir = "./src/dotty/"
-
+/*
   @Test def pos_t2168_pat = compileFile(posDir, "t2168")
   @Test def pos_erasure = compileFile(posDir, "erasure")
   @Test def pos_Coder() = compileFile(posDir, "Coder")
@@ -41,7 +41,6 @@ class tests extends CompilerTest {
   @Test def pos_collections() = compileFile(posDir, "collections")
   @Test def pos_functions1() = compileFile(posDir, "functions1")
   @Test def pos_implicits1() = compileFile(posDir, "implicits1")
-//buggy, but could be because of type bounds ->
   @Test def pos_inferred() = compileFile(posDir, "inferred")
 
   @Test def pos_Patterns() = compileFile(posDir, "Patterns")
@@ -53,7 +52,6 @@ class tests extends CompilerTest {
   @Test def pos_nameddefaults() = compileFile(posDir, "nameddefaults")
   @Test def pos_desugar() = compileFile(posDir, "desugar")
   @Test def pos_sigs() = compileFile(posDir, "sigs")
-//buggy, could be because of type bounds as well ->
  @ Test def pos_typers() = compileFile(posDir, "typers")
   @Test def pos_typedidents() = compileFile(posDir, "typedIdents")
   @Test def pos_assignments() = compileFile(posDir, "assignments")
@@ -65,13 +63,13 @@ class tests extends CompilerTest {
   @Test def pos_structural() = compileFile(posDir, "structural")
   @Test def pos_overloadedAccess = compileFile(posDir, "overloadedAccess")
   @Test def pos_approximateUnion = compileFile(posDir, "approximateUnion")
-//buggy, probably because of extension to AnyRef->
   @ Test def pos_tailcall = compileDir(posDir + "tailcall/")
   @Test def pos_nullarify = compileFile(posDir, "nullarify", "-Ycheck:nullarify" :: Nil)
   @Test def pos_subtyping = compileFile(posDir, "subtyping")
   @Test def pos_t2613 = compileFile(posSpecialDir, "t2613")(allowDeepSubtypes)
   @Test def pos_packageObj = compileFile(posDir, "i0239")
   @Test def pos_anonClassSubtyping = compileFile(posDir, "anonClassSubtyping")
+  */@Test def pos_specialization = compileFile(posDir, "specialization") /*
 
 // contains buggy tests
   @ Test def pos_all = compileFiles(posDir, failedOther)
@@ -177,7 +175,7 @@ class tests extends CompilerTest {
   val javaDir = "./tests/pos/java-interop/"
   @Test def java_all = compileFiles(javaDir)
 
-
+*/
   //@Test def dotc_compilercommand = compileFile(dotcDir + "tools/dotc/config/", "CompilerCommand")
 
 }
