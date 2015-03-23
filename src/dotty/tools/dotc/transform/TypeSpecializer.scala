@@ -18,7 +18,7 @@ class TypeSpecializer extends MiniPhaseTransform {
   private val specializationRequests: mutable.HashMap[Symbols.Symbol, List[List[Type]]] = mutable.HashMap.empty
 
   def registerSpecializationRequest(method: Symbols.Symbol)(arguments: List[Type])(implicit ctx: Context) = {
-    // assert(ctx.phaseId <= this.period.phaseId) // This fails - why ?
+    assert(ctx.phaseId <= this.period.phaseId) // This fails - why ?
     val prev = specializationRequests.getOrElse(method, List.empty)
     specializationRequests.put(method, arguments :: prev)
   }
