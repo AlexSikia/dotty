@@ -9,7 +9,9 @@ trait ArrayVectorOrder[@specialized(Int) A] extends Ordering[A] {
 }
 
 object vectorOrder {
-  implicit def arrayOrder[@specialized(Int) A](): miniboxing.tests.compile.ArrayVectorOrder[A] =
+  implicit def arrayOrder[@specialized(Int) A]() : miniboxing.tests.compile.ArrayVectorOrder[A] =
+   new ArrayVectorOrder[A] { }
+}
   /*
    * Before applying patch:
    *
@@ -47,5 +49,3 @@ object vectorOrder {
    * 	at scala.tools.nsc.transform.Mixin$$anonfun$scala$tools$nsc$transform$Mixin$$mixinTraitMembers$1$1.apply(Mixin.scala:339)
    * 	at scala.tools.nsc.transform.Mixin$$anonfun$scala$tools$nsc$transform$Mixin$$mixinTraitMembers$1$1.apply(Mixin.scala:292)
    */
-    new ArrayVectorOrder[A] { }
-}
