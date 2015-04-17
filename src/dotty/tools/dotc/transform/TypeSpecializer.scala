@@ -27,19 +27,21 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
   override def transformInfo(tp: Type, sym: Symbol)(implicit ctx: Context): Type = {
     tp match {
       case poly: PolyType  if !(sym.isPrimaryConstructor
-        || (sym is Flags.Label)) =>
+                              || (sym is Flags.Label)) =>
         /*val st = shouldSpecializeFor(sym)
           val stt = st.flatten
           val specTypes = stt.filter(stpe => poly.paramBounds.contains(stpe))
         if (!specTypes.isEmpty) {
           println("yay")
         }*/
+        println(poly.hasAnnotation(ctx.definitions.specializedAnnot))
         val specTypes = specialisedTypeToSuffix.keys.toList
         val names =  specTypes.map(stpe => specialisedTypeToSuffix(ctx)(stpe))
         val newSym = ctx.newSymbol(sym.owner, (sym.name + names.mkString).toTermName, sym.flags | Flags.Synthetic, poly.instantiate(specTypes))
+        //if (!newSym.is(Flags.Frozen)) ctx.enter(newSym)
         ctx.enter(newSym)
         //newSymbolMap++=(mutable.Map(sym, newSym))
-        poly.resType
+        newSym.info
       case _ =>
         tp
     }
