@@ -52,7 +52,7 @@ class tests extends CompilerTest {
   @Test def pos_nameddefaults() = compileFile(posDir, "nameddefaults")
   @Test def pos_desugar() = compileFile(posDir, "desugar")
   @Test def pos_sigs() = compileFile(posDir, "sigs")
- @ Test def pos_typers() = compileFile(posDir, "typers")
+  @Test def pos_typers() = compileFile(posDir, "typers")
   @Test def pos_typedidents() = compileFile(posDir, "typedIdents")
   @Test def pos_assignments() = compileFile(posDir, "assignments")
   @Test def pos_packageobject() = compileFile(posDir, "packageobject")
@@ -63,7 +63,7 @@ class tests extends CompilerTest {
   @Test def pos_structural() = compileFile(posDir, "structural")
   @Test def pos_overloadedAccess = compileFile(posDir, "overloadedAccess")
   @Test def pos_approximateUnion = compileFile(posDir, "approximateUnion")
-  @ Test def pos_tailcall = compileDir(posDir + "tailcall/")
+  @Test def pos_tailcall = compileDir(posDir + "tailcall/")
   @Test def pos_nullarify = compileFile(posDir, "nullarify", "-Ycheck:nullarify" :: Nil)
   @Test def pos_subtyping = compileFile(posDir, "subtyping")
   @Test def pos_t2613 = compileFile(posSpecialDir, "t2613")(allowDeepSubtypes)
@@ -71,10 +71,9 @@ class tests extends CompilerTest {
   @Test def pos_anonClassSubtyping = compileFile(posDir, "anonClassSubtyping")
   @Test def pos_specialization = compileFile(posDir, "specialization")
 
-// contains buggy tests
   @Test def pos_all = compileFiles(posDir, failedOther)
 
-  */@Test def pos_SI7638 = compileFile(posDir, "SI-7638")/*
+  @Test def pos_SI7638 = compileFile(posDir, "SI-7638")
   @Test def pos_SI7638a = compileFile(posDir, "SI-7638a")
 
   @Test def new_all = compileFiles(newDir, twice)
@@ -170,6 +169,8 @@ class tests extends CompilerTest {
   @Test def java_all = compileFiles(javaDir)
 
 */
+  @Test def pos_specialization = compileFile(posDir, "specialization")
+
   //@Test def dotc_compilercommand = compileFile(dotcDir + "tools/dotc/config/", "CompilerCommand")
 
 }
