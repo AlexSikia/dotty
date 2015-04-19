@@ -5,13 +5,13 @@ import dotty.tools.dotc.ast.Trees.SeqLiteral
 import dotty.tools.dotc.ast.tpd._
 import dotty.tools.dotc.core.Annotations.Annotation
 import dotty.tools.dotc.core.Contexts.Context
+import dotty.tools.dotc.core.Decorators.StringDecorator
 import dotty.tools.dotc.core.DenotTransformers.InfoTransformer
 import dotty.tools.dotc.core.Names.TermName
-import dotty.tools.dotc.core.Symbols.{TermSymbol, Symbol}
+import dotty.tools.dotc.core.Symbols.Symbol
 import dotty.tools.dotc.core.{Symbols, Flags}
 import dotty.tools.dotc.core.Types._
 import dotty.tools.dotc.transform.TreeTransforms.{TransformerInfo, MiniPhaseTransform}
-import dotty.tools.dotc.core.Decorators._
 import scala.collection.mutable
 
 class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
@@ -19,41 +19,6 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
   override def phaseName = "specialize"
 
   final val maxTparamsToSpecialize = 2
-
-  private val specializationRequests: mutable.HashMap[Symbols.Symbol, List[List[Type]]] = mutable.HashMap.empty
-
-  private var newSymbolMap : mutable.HashMap[TermName, TermSymbol] = mutable.HashMap.empty
-
-  override def transformInfo(tp: Type, sym: Symbol)(implicit ctx: Context): Type = {
-    tp match {
-      case poly: PolyType  if !(sym.isPrimaryConstructor
-                              || (sym is Flags.Label)) =>
-        /*val st = shouldSpecializeFor(sym)
-          val stt = st.flatten
-          val specTypes = stt.filter(stpe => poly.paramBounds.contains(stpe))
-        if (!specTypes.isEmpty) {
-          println("yay")
-        }*/
-        println(poly.hasAnnotation(ctx.definitions.specializedAnnot))
-        val specTypes = specialisedTypeToSuffix.keys.toList
-        val names =  specTypes.map(stpe => specialisedTypeToSuffix(ctx)(stpe))
-        val newSym = ctx.newSymbol(sym.owner, (sym.name + names.mkString).toTermName, sym.flags | Flags.Synthetic, poly.instantiate(specTypes))
-        //if (!newSym.is(Flags.Frozen)) ctx.enter(newSym)
-        ctx.enter(newSym)
-        //newSymbolMap++=(mutable.Map(sym, newSym))
-        newSym.info
-      case _ =>
-        tp
-    }
-    //ctx.newSymbol(tree.symbol.owner, (tree.name + names.mkString).toTermName, tree.symbol.flags | Flags.Synthetic, poly.instantiate(instatiations.toList))
-  }
-
-  def registerSpecializationRequest(method: Symbols.Symbol)(arguments: List[Type])(implicit ctx: Context) = {
-    if(ctx.phaseId > this.treeTransformPhase.id)
-      assert(ctx.phaseId <= this.treeTransformPhase.id)
-    val prev = specializationRequests.getOrElse(method, List.empty)
-    specializationRequests.put(method, arguments :: prev)
-  }
 
   private final def nameToSpecialisedType(implicit ctx: Context) =
     Map("Byte" -> ctx.definitions.ByteType,
@@ -68,14 +33,66 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
 
   private final def specialisedTypeToSuffix(implicit ctx: Context) =
     Map(ctx.definitions.ByteType -> "$mcB$sp",
-    ctx.definitions.BooleanType -> "$mcZ$sp",
-    ctx.definitions.ShortType -> "$mcS$sp",
-    ctx.definitions.IntType -> "$mcI$sp",
-    ctx.definitions.LongType -> "$mcJ$sp",
-    ctx.definitions.FloatType -> "$mcF$sp",
-    ctx.definitions.DoubleType -> "$mcD$sp",
-    ctx.definitions.CharType -> "$mcC$sp",
-    ctx.definitions.UnitType -> "$mcV$sp")
+      ctx.definitions.BooleanType -> "$mcZ$sp",
+      ctx.definitions.ShortType -> "$mcS$sp",
+      ctx.definitions.IntType -> "$mcI$sp",
+      ctx.definitions.LongType -> "$mcJ$sp",
+      ctx.definitions.FloatType -> "$mcF$sp",
+      ctx.definitions.DoubleType -> "$mcD$sp",
+      ctx.definitions.CharType -> "$mcC$sp",
+      ctx.definitions.UnitType -> "$mcV$sp")
+
+  private val specializationRequests: mutable.HashMap[Symbols.Symbol, List[List[Type]]] = mutable.HashMap.empty
+
+  private val newSymbolMap: mutable.HashMap[TermName, (List[Symbols.TermSymbol], List[Type])] = mutable.HashMap.empty // Why does the typechecker require TermSymbol ?
+
+  override def transformInfo(tp: Type, sym: Symbol)(implicit ctx: Context): Type = {
+
+    tp.widen match {
+      case poly: PolyType if !(sym.isPrimaryConstructor
+                             || (sym is Flags.Label)) =>
+
+        def generateSpecializations(remainingTParams: List[Type], remainingBounds: List[TypeBounds])
+                                      (instantiations: List[Type], names: List[String])(implicit ctx: Context): Unit = {
+          if (remainingTParams.nonEmpty) {
+            val typeToSpecialize = remainingTParams.head
+            val bounds = remainingBounds.head
+            val a = shouldSpecializeFor(typeToSpecialize.typeSymbol)  // TODO returns Nil because no annotations are found - elucidate
+              a.flatten
+              .filter { tpe =>
+              bounds.contains(tpe)
+            }.foreach({ tpe =>
+              val nme = specialisedTypeToSuffix(ctx)(tpe)
+              generateSpecializations(remainingTParams.tail, remainingBounds.tail)(tpe :: instantiations, nme :: names)
+            })
+          }
+          else {
+            generateSpecializedSymbols(instantiations.reverse, names.reverse)
+          }
+        }
+
+        def generateSpecializedSymbols(instantiations : List[Type], names: List[String])(implicit ctx: Context): Unit = {
+          val newSym = ctx.newSymbol(sym.owner, (sym.name + names.mkString).toTermName, sym.flags | Flags.Synthetic, poly.instantiate(instantiations.toList))
+          ctx.enter(newSym) // TODO check frozen flag ?
+          val prev = newSymbolMap.getOrElse(sym.name.toTermName, (Nil, Nil))
+          val newSyms = newSym :: prev._1
+          newSymbolMap.put(sym.name.toTermName, (newSyms, instantiations)) // Could `.put(...)` bring up (mutability) issues ?
+        }
+        val origTParams = poly.resType.paramTypess.flatten // Is this really what is needed ?
+        val bounds = poly.paramBounds
+        generateSpecializations(origTParams, bounds)(List.empty, List.empty)
+        tp
+      case _ =>
+        tp
+    }
+  }
+
+  def registerSpecializationRequest(method: Symbols.Symbol)(arguments: List[Type])(implicit ctx: Context) = {
+    if(ctx.phaseId > this.treeTransformPhase.id)
+      assert(ctx.phaseId <= this.treeTransformPhase.id)
+    val prev = specializationRequests.getOrElse(method, List.empty)
+    specializationRequests.put(method, arguments :: prev)
+  }
 
   def specializeForAll(sym: Symbols.Symbol)(implicit ctx: Context): List[List[Type]] = {
     registerSpecializationRequest(sym)(specialisedTypeToSuffix.keys.toList)
@@ -109,14 +126,15 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
     tree.tpe.widen match {
 
       case poly: PolyType if !(tree.symbol.isPrimaryConstructor
-                               || (tree.symbol is Flags.Label)) => {
+                               || (tree.symbol is Flags.Label)) =>
         val origTParams = tree.tparams.map(_.symbol)
         val origVParams = tree.vparamss.flatten.map(_.symbol)
         println(s"specializing ${tree.symbol} for Tparams: $origTParams")
 
-        def specialize(instantiations: List[Type], name: TermName): Tree = {
-          newSymbolMap(name) match {
-            case newSym =>
+        def specialize(instantiations: List[Type]): List[Tree] = {
+          newSymbolMap(tree.name) match {
+            case newSyms: (List[Symbol], List[Type]) =>
+              newSyms._1.map{newSym =>
               polyDefDef(newSym, { tparams => vparams => {
                 assert(tparams.isEmpty)
                 new TreeTypeMap(
@@ -127,33 +145,15 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
                   newOwners = newSym :: Nil
                 ).transform(tree.rhs)
               }
-              })
+              })}
             case nil =>
-              ctx.error(s"New Symbol for method $name during $phaseName not initialized correctly.")
-              EmptyTree // TODO change default behaviour
+              List()
           }
-          //ctx.newSymbol(tree.symbol.owner, (tree.name + names.mkString).toTermName, tree.symbol.flags | Flags.Synthetic, poly.instantiate(instantiations.toList))
         }
 
-        def generateSpecializations(remainingTParams: List[TypeDef], remainingBounds: List[TypeBounds])
-                                  (instantiations: List[Type], name: TermName): Iterable[Tree] = {
-          if (remainingTParams.nonEmpty) {
-            val typeToSpecialize = remainingTParams.head
-            val bounds = remainingBounds.head
-            shouldSpecializeFor(typeToSpecialize.symbol)
-              .flatten
-              .filter{ tpe =>
-              bounds.contains(tpe)
-            }.flatMap { tpe =>
-              generateSpecializations(remainingTParams.tail, remainingBounds.tail)(tpe :: instantiations, name)
-            }
-          }
-          else {
-            List(specialize(instantiations.reverse, name))
-          }
-        }
-        Thicket(tree :: generateSpecializations(tree.tparams, poly.paramBounds)(List.empty, tree.name).toList)
-      }
+        val specializedMethods: List[Tree] = (for (inst <- newSymbolMap.keys) yield specialize(newSymbolMap(inst)._2)).flatten.toList
+        Thicket(tree :: specializedMethods)
+
       case _ => tree
     }
   }
