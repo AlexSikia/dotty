@@ -50,7 +50,7 @@ class ClassfileParser(
     case e: RuntimeException =>
       if (ctx.debug) e.printStackTrace()
       throw new IOException(
-        sm"""class file $classfile is broken, reading aborted with $e.getClass
+        sm"""class file $classfile is broken, reading aborted with ${e.getClass}
             |${Option(e.getMessage).getOrElse("")}""")
   }
 
@@ -130,16 +130,23 @@ class ClassfileParser(
     for (i <- 0 until in.nextChar) parseMember(method = true)
     classInfo = parseAttributes(classRoot.symbol, classInfo)
     if (isAnnotation) addAnnotationConstructor(classInfo)
+
+    val companionClassMethod = ctx.synthesizeCompanionMethod(nme.COMPANION_CLASS_METHOD, classRoot, moduleRoot)
+    if (companionClassMethod.exists) companionClassMethod.entered
+    val companionModuleMethod = ctx.synthesizeCompanionMethod(nme.COMPANION_MODULE_METHOD, moduleRoot, classRoot)
+    if (companionModuleMethod.exists) companionModuleMethod.entered
+
     setClassInfo(classRoot, classInfo)
     setClassInfo(moduleRoot, staticInfo)
   }
+
 
   /** Add type parameters of enclosing classes */
   def addEnclosingTParams()(implicit ctx: Context): Unit = {
     var sym = classRoot.owner
     while (sym.isClass && !(sym is Flags.ModuleClass)) {
       for (tparam <- sym.typeParams) {
-        classTParams = classTParams.updated(tparam.name.unexpandedName(), tparam)
+        classTParams = classTParams.updated(tparam.name.unexpandedName, tparam)
       }
       sym = sym.owner
     }
@@ -579,7 +586,7 @@ class ClassfileParser(
         val targs = tparams.map(_.typeRef)
         val paramNames = attrs.map(_.name.asTermName)
         val paramTypes = attrs.map(_.info.resultType)
-        
+
         def addConstr(ptypes: List[Type]) = {
           val mtype = MethodType(paramNames, ptypes, classRoot.typeRef.appliedTo(targs))
           val constrType = if (tparams.isEmpty) mtype else TempPolyType(tparams, mtype)
@@ -595,15 +602,15 @@ class ClassfileParser(
               addDefaultGetter(attr, i)
             }
         }
-        
+
         addConstr(paramTypes)
         if (paramTypes.nonEmpty)
           paramTypes.last match {
-            case defn.ArrayType(elemtp) => 
-              addConstr(paramTypes.init :+ defn.RepeatedParamType.appliedTo(elemtp))        
+            case defn.ArrayType(elemtp) =>
+              addConstr(paramTypes.init :+ defn.RepeatedParamType.appliedTo(elemtp))
             case _ =>
         }
-          
+
     }
   }
 
@@ -728,7 +735,7 @@ class ClassfileParser(
     def originalName = pool.getName(name)
 
     override def toString =
-      originalName + " in " + outerName + "(" + externalName +")"
+      originalName + " in " + outerName + "(" + externalName + ")"
   }
 
   object innerClasses extends scala.collection.mutable.HashMap[Name, InnerClassEntry] {
@@ -774,7 +781,7 @@ class ClassfileParser(
                   |externalName = $externalName,
                   |outerName = $outerName,
                   |innerName = $innerName
-                  |owner.fullName = owner.showFullName
+                  |owner.fullName = ${owner.showFullName}
                   |while parsing ${classfile}""")
             result
 

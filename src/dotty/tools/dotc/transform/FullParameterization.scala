@@ -91,8 +91,8 @@ trait FullParameterization {
       case info: ExprType => (0, info.resultType)
       case _ => (0, info)
     }
-    val ctparams = if(abstractOverClass) clazz.typeParams else Nil
-    val ctnames = ctparams.map(_.name.unexpandedName())
+    val ctparams = if (abstractOverClass) clazz.typeParams else Nil
+    val ctnames = ctparams.map(_.name.unexpandedName)
 
     /** The method result type */
     def resultType(mapClassParams: Type => Type) = {
@@ -176,6 +176,12 @@ trait FullParameterization {
           } else EmptyTree
         }
         tree match {
+          case Return(expr, from) if !from.isEmpty =>
+            val rewired = rewiredTarget(from, derived)
+            if (rewired.exists)
+              tpd.cpy.Return(tree)(expr, Ident(rewired.termRef))
+            else
+              EmptyTree
           case Ident(_) => rewireCall(thisRef)
           case Select(qual, _) => rewireCall(qual)
           case tree @ TypeApply(fn, targs1) =>

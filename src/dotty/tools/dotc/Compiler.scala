@@ -6,7 +6,7 @@ import Contexts._
 import Periods._
 import Symbols._
 import Scopes._
-import typer.{FrontEnd, Typer, Mode, ImportInfo, RefChecks}
+import typer.{FrontEnd, Typer, Mode, ImportInfo, RefChecks, InstChecks}
 import reporting.ConsoleReporter
 import dotty.tools.dotc.core.Phases.Phase
 import dotty.tools.dotc.transform._
@@ -38,27 +38,26 @@ class Compiler {
   def phases: List[List[Phase]] =
     List(
       List(new FrontEnd),
+      List(new InstChecks),
       List(new FirstTransform,
            new SyntheticMethods),
       List(new SuperAccessors),
-      //List(new Pickler), // Pickler needs to come last in a group since it should not pickle trees generated later
+      List(new Pickler), // Pickler needs to come last in a group since it should not pickle trees generated later
       List(new RefChecks,
            new ElimRepeated,
-           new ElimLocals,
-           new ExtensionMethods),
-      List(new TailRec), // TailRec needs to be in its own group for now.
-                         // Otherwise it produces -Ycheck incorrect code for
-                         // file core/Decorators.scala.
+           new NormalizeFlags,
+           new ExtensionMethods,
+           new TailRec),
       List(new PatternMatcher,
            new ExplicitOuter,
            new Splitter),
       List(new TypeSpecializer),
       List(new LazyVals,
-           new ElimByName,
            new SeqLiterals,
            new InterceptedMethods,
            new Literalize,
            new Getters,
+           new ElimByName,
            new ResolveSuper),
       List(new Erasure),
       List(new Mixin,
@@ -68,7 +67,7 @@ class Compiler {
       List(new LambdaLift,
            new Flatten,
            new RestoreScopes),
-      List(/*new PrivateToStatic,*/ new CollectEntryPoints, new LabelDefs),
+      List(/*new PrivateToStatic,*/ new CollectEntryPoints, new LabelDefs, new ElimWildcardIdents, new TraitConstructors),
       List(new GenBCode)
     )
 
@@ -87,7 +86,7 @@ class Compiler {
    */
   def rootContext(implicit ctx: Context): Context = {
     ctx.definitions.init(ctx)
-    ctx.usePhases(phases)
+    ctx.setPhasePlan(phases)
     val rootScope = new MutableScope
     val bootstrap = ctx.fresh
       .setPeriod(Period(nextRunId, FirstPhaseId))
@@ -105,10 +104,8 @@ class Compiler {
   }
 
   def newRun(implicit ctx: Context): Run = {
-    try new Run(this)(rootContext)
-    finally {
-      ctx.base.reset()
-      ctx.runInfo.clear()
-    }
+    ctx.base.reset()
+    ctx.runInfo.clear()
+    new Run(this)(rootContext)
   }
 }

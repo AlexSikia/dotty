@@ -347,7 +347,7 @@ trait ImplicitRunInfo { self: RunInfo =>
             if (liftedTp ne tp) iscope(liftedTp, isLifted = true)
             else ofTypeImplicits(collectCompanions(tp))
           if (ctx.typerState.ephemeral) record("ephemeral cache miss: implicitScope")
-          else if(cacheResult) implicitScopeCache(tp) = result
+          else if (cacheResult) implicitScopeCache(tp) = result
           result
         }
         finally ctx.typerState.ephemeral |= savedEphemeral
@@ -380,6 +380,7 @@ trait Implicits { self: Typer =>
   override def viewExists(from: Type, to: Type)(implicit ctx: Context): Boolean = (
        !from.isError
     && !to.isError
+    && !ctx.isAfterTyper
     && (ctx.mode is Mode.ImplicitsEnabled)
     && { from.widenExpr match {
            case from: TypeRef if defn.ScalaValueClasses contains from.symbol =>
@@ -454,7 +455,7 @@ trait Implicits { self: Typer =>
     private def nestedContext = ctx.fresh.setMode(ctx.mode &~ Mode.ImplicitsEnabled)
 
     private def implicitProto(resultType: Type, f: Type => Type) =
-      if (argument.isEmpty) f(resultType) else ViewProto(f(argument.tpe.widen), f(resultType)) 
+      if (argument.isEmpty) f(resultType) else ViewProto(f(argument.tpe.widen), f(resultType))
         // Not clear whether we need to drop the `.widen` here. All tests pass with it in place, though.
 
     assert(argument.isEmpty || argument.tpe.isValueType || argument.tpe.isInstanceOf[ExprType],
@@ -501,7 +502,7 @@ trait Implicits { self: Typer =>
         if (ctx.typerState.reporter.hasErrors)
           nonMatchingImplicit(ref)
         else if (contextual && !shadowing.tpe.isError && !refMatches(shadowing)) {
-          implicits.println(i"SHADOWING $ref is shadowed by $shadowing")
+          implicits.println(i"SHADOWING $ref in ${ref.termSymbol.owner} is shadowed by $shadowing in ${shadowing.symbol.owner}")
           shadowedImplicit(ref, methPart(shadowing).tpe)
         }
         else

@@ -61,7 +61,7 @@ object Parsers {
       atPos(Position(start, end, point))(t)
 
     def atPos[T <: Positioned](start: Offset, point: Offset)(t: T): T =
-      atPos(start, point, in.lastOffset)(t)
+      atPos(start, point, in.lastOffset max start)(t)
 
     def atPos[T <: Positioned](start: Offset)(t: T): T =
       atPos(start, start)(t)
@@ -184,11 +184,11 @@ object Parsers {
               return
             skippedParens.change(LBRACKET, -1)
           case LBRACE =>
-            skippedParens.change(LBRACE, +1)
+            skippedParens.change(LBRACE, + 1)
           case LPAREN =>
-            skippedParens.change(LPAREN, +1)
+            skippedParens.change(LPAREN, + 1)
           case LBRACKET=>
-            skippedParens.change(LBRACKET, +1)
+            skippedParens.change(LBRACKET, + 1)
           case _ =>
             if (mustStartStat &&
                 in.isAfterLineEnd() &&
@@ -1408,12 +1408,7 @@ object Parsers {
     }
 
     /** Wrap annotation or constructor in New(...).<init> */
-    def wrapNew(tpt: Tree) = tpt match {
-      case AppliedTypeTree(tpt1, targs) =>
-        TypeApply(Select(New(tpt1), nme.CONSTRUCTOR), targs)
-      case _ =>
-        Select(New(tpt), nme.CONSTRUCTOR)
-    }
+    def wrapNew(tpt: Tree) = Select(New(tpt), nme.CONSTRUCTOR)
 
     /** Adjust start of annotation or constructor to position of preceding @ or new */
     def adjustStart(start: Offset)(tree: Tree): Tree = {
@@ -1989,7 +1984,7 @@ object Parsers {
           stats += defOrDcl(in.offset, Modifiers())
         } else if (!isStatSep) {
           syntaxErrorOrIncomplete(
-            "illegal start of declaration"+
+            "illegal start of declaration" +
             (if (inFunReturnType) " (possible cause: missing `=' in front of current method body)"
              else ""))
         }

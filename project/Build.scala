@@ -1,5 +1,7 @@
 import sbt.Keys._
 import sbt._
+import java.io.{ RandomAccessFile, File }
+import java.nio.channels.FileLock
 
 object DottyBuild extends Build {
 
@@ -10,6 +12,7 @@ object DottyBuild extends Build {
     // "-agentpath:/home/dark/opt/yjp-2013-build-13072/bin/linux-x86-64/libyjpagent.so"
   )
 
+  var partestLock: FileLock = null
 
   val defaults = Defaults.defaultSettings ++ Seq(
     // set sources to src/, tests to test/ and resources to resources/
@@ -27,14 +30,16 @@ object DottyBuild extends Build {
 
     // to get Scala 2.11
     resolvers += Resolver.sonatypeRepo("releases"),
-    
+
     // get reflect and xml onboard
     libraryDependencies ++= Seq("org.scala-lang" % "scala-reflect" % scalaVersion.value,
                                 "org.scala-lang.modules" %% "scala-xml" % "1.0.1",
-                                "me.d-d" % "scala-compiler" % "2.11.5-20141212-151631-beaa78b033"),
+                                "me.d-d" % "scala-compiler" % "2.11.5-20150416-144435-09c4a520e1",
+                                "org.scala-lang.modules" %% "scala-partest" % "1.0.5" % "test",
+                                "jline" % "jline" % "2.12"),
 
     // get junit onboard
-    libraryDependencies += "com.novocode" % "junit-interface" % "0.11-RC1" % "test",
+    libraryDependencies += "com.novocode" % "junit-interface" % "0.11" % "test",
 
     // scalac options
     scalacOptions in Global ++= Seq("-feature", "-deprecation", "-language:_"),
@@ -45,7 +50,16 @@ object DottyBuild extends Build {
     incOptions := incOptions.value.withNameHashing(true),
 
     // enable verbose exception messages for JUnit
-    testOptions += Tests.Argument(TestFrameworks.JUnit, "-a", "-v", "--run-listener=test.ContextEscapeDetector"),
+    testOptions in Test += Tests.Argument(TestFrameworks.JUnit, "-a", "-v", "--run-listener=test.ContextEscapeDetector"),
+    testOptions in Test += Tests.Cleanup({ () => if (partestLock != null) partestLock.release }),
+    // when this file is locked, running test generates the files for partest
+    // otherwise it just executes the tests directly
+    lockPartestFile := {
+      val partestLockFile = "." + File.separator + "tests" + File.separator + "partest.lock"
+      partestLock = new RandomAccessFile(partestLockFile, "rw").getChannel.tryLock
+    },
+    runPartestRunner <<= runTask(Test, "dotty.partest.DPConsoleRunner", "") dependsOn (test in Test),
+
     // Adjust classpath for running dotty
     mainClass in (Compile, run) := Some("dotty.tools.dotc.Main"),
     fork in run := true,
@@ -58,7 +72,7 @@ object DottyBuild extends Build {
        val path = for {
          file <- attList.map(_.data)
          path = file.getAbsolutePath
-       } yield "-Xbootclasspath/p:" + path       
+       } yield "-Xbootclasspath/p:" + path
        // dotty itself needs to be in the bootclasspath
        val fullpath = ("-Xbootclasspath/a:" + bin) :: path.toList
        // System.err.println("BOOTPATH: " + fullpath)
@@ -78,7 +92,7 @@ object DottyBuild extends Build {
 
       tuning ::: agentOptions ::: travis_build ::: fullpath
     }
-  )
+  ) ++ addCommandAlias("partest", ";lockPartestFile;runPartestRunner")
 
   lazy val dotty = Project(id = "dotty", base = file("."), settings = defaults)
 
@@ -91,7 +105,7 @@ object DottyBuild extends Build {
 
 
     libraryDependencies ++= Seq("com.storm-enroute" %% "scalameter" % "0.6" % Test,
-      "com.novocode" % "junit-interface" % "0.11-RC1"),
+      "com.novocode" % "junit-interface" % "0.11"),
     testFrameworks += new TestFramework("org.scalameter.ScalaMeterFramework"),
 
     // scalac options
@@ -108,8 +122,8 @@ object DottyBuild extends Build {
       val path = for {
         file <- attList.map(_.data)
         path = file.getAbsolutePath
-        prefix = if(path.endsWith(".jar")) "p" else "a"
-      } yield "-Xbootclasspath/"+ prefix +":" + path
+        prefix = if (path.endsWith(".jar")) "p" else "a"
+      } yield "-Xbootclasspath/" + prefix + ":" + path
       // dotty itself needs to be in the bootclasspath
       val fullpath = ("-Xbootclasspath/a:" + bin) :: path.toList
       // System.err.println("BOOTPATH: " + fullpath)
@@ -120,7 +134,7 @@ object DottyBuild extends Build {
         else
           List()
       val res = agentOptions ::: travis_build ::: fullpath
-      println("Running with javaOptions: " +res)
+      println("Running with javaOptions: " + res)
       res
     }
   )
@@ -128,4 +142,8 @@ object DottyBuild extends Build {
 
   lazy val benchmarks = Project(id = "dotty-bench", settings = benchmarkSettings,
     base = file("bench")) dependsOn(dotty % "compile->test")
+
+  lazy val lockPartestFile = TaskKey[Unit]("lockPartestFile", "Creates the file lock on  ./tests/partest.lock")
+  lazy val runPartestRunner = TaskKey[Unit]("runPartestRunner", "Runs partests")
+
 }

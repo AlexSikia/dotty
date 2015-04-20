@@ -132,8 +132,8 @@ class TypeApplications(val self: Type) extends AnyVal {
     LambdaClass(forcing = false).exists
 
   /** Is type `tp` a Lambda with all Arg$ fields fully instantiated? */
-  def isInstantiatedLambda(tp: Type)(implicit ctx: Context): Boolean =
-    tp.isSafeLambda && tp.typeParams.isEmpty
+  def isInstantiatedLambda(implicit ctx: Context): Boolean =
+    isSafeLambda && typeParams.isEmpty
 
   /** Encode the type resulting from applying this type to given arguments */
   final def appliedTo(args: List[Type])(implicit ctx: Context): Type = /*>|>*/ track("appliedTo") /*<|<*/ {
@@ -188,8 +188,19 @@ class TypeApplications(val self: Type) extends AnyVal {
     if (args.isEmpty || ctx.erasedTypes) self
     else {
       val res = instantiate(self, self)
-      if (isInstantiatedLambda(res)) res.select(tpnme.Apply) else res
+      if (res.isInstantiatedLambda) res.select(tpnme.Apply) else res
     }
+  }
+
+  /** Simplify a fully instantiated type of the form `LambdaX{... type Apply = T } # Apply` to `T`.
+   */
+  def simplifyApply(implicit ctx: Context): Type = self match {
+    case self @ TypeRef(prefix, tpnme.Apply) if prefix.isInstantiatedLambda =>
+      prefix.member(tpnme.Apply).info match {
+        case TypeAlias(alias) => alias
+        case _ => self
+      }
+    case _ => self
   }
 
   final def appliedTo(arg: Type)(implicit ctx: Context): Type = appliedTo(arg :: Nil)
@@ -257,9 +268,7 @@ class TypeApplications(val self: Type) extends AnyVal {
           case _ => default
         }
       case tp @ RefinedType(parent, name) if !tp.member(name).symbol.is(ExpandedTypeParam) =>
-        val pbase = parent.baseTypeWithArgs(base)
-        if (pbase.member(name).exists) RefinedType(pbase, name, tp.refinedInfo)
-        else pbase
+        tp.wrapIfMember(parent.baseTypeWithArgs(base))
       case tp: TermRef =>
         tp.underlying.baseTypeWithArgs(base)
       case AndType(tp1, tp2) =>
@@ -270,7 +279,7 @@ class TypeApplications(val self: Type) extends AnyVal {
         default
     }
   }
-
+  
   /** Translate a type of the form From[T] to To[T], keep other types as they are.
    *  `from` and `to` must be static classes, both with one type parameter, and the same variance.
    */
@@ -372,7 +381,7 @@ class TypeApplications(val self: Type) extends AnyVal {
     case JavaArrayType(elemtp) => elemtp
     case _ => firstBaseArgInfo(defn.SeqClass)
   }
-  
+
   def containsSkolemType(target: Type)(implicit ctx: Context): Boolean = {
     def recur(tp: Type): Boolean = tp.stripTypeVar match {
       case SkolemType(tp) =>
@@ -393,7 +402,7 @@ class TypeApplications(val self: Type) extends AnyVal {
       case _ =>
         false
     }
-    recur(self) 
+    recur(self)
   }
 
   /** Given a type alias
@@ -509,7 +518,7 @@ class TypeApplications(val self: Type) extends AnyVal {
    *               { type $hkArg$0 = T1; ...; type $hkArg$n = Tn }
    *
    *  satisfies predicate `p`. Try base types in the order of their occurrence in `baseClasses`.
-   *  A type parameter matches a varianve V if it has V as its variance or if V == 0.
+   *  A type parameter matches a variance V if it has V as its variance or if V == 0.
    */
   def testLifted(tparams: List[Symbol], p: Type => Boolean)(implicit ctx: Context): Boolean = {
     def tryLift(bcs: List[ClassSymbol]): Boolean = bcs match {
@@ -534,7 +543,7 @@ class TypeApplications(val self: Type) extends AnyVal {
         false
     }
     if (tparams.isEmpty) false
-    else if (typeParams.nonEmpty) p(EtaExpand)
+    else if (typeParams.nonEmpty) p(EtaExpand) || tryLift(self.baseClasses)
     else tryLift(self.baseClasses)
   }
 }

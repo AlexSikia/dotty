@@ -169,7 +169,7 @@ object Checking {
     val checkTree = new TreeAccumulator[Unit] {
       def checkRef(tree: Tree, sym: Symbol) =
         if (sym.maybeOwner == refineCls && !seen(sym)) forwardRef(tree)
-      def apply(x: Unit, tree: Tree) = tree match {
+      def apply(x: Unit, tree: Tree)(implicit ctx: Context) = tree match {
         case tree: MemberDef =>
           foldOver(x, tree)
           seen += tree.symbol
@@ -232,7 +232,8 @@ trait Checking {
 
   /** Check that type `tp` is stable. */
   def checkStable(tp: Type, pos: Position)(implicit ctx: Context): Unit =
-    if (!tp.isStable) ctx.error(d"$tp is not stable", pos)
+    if (!tp.isStable && !tp.isErroneous)
+      ctx.error(d"$tp is not stable", pos)
 
   /** Check that type `tp` is a legal prefix for '#'.
    *  @return The type itself

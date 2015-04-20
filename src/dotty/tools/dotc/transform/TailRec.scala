@@ -83,8 +83,8 @@ class TailRec extends MiniPhaseTransform with DenotTransformer with FullParamete
   override def transformDefDef(tree: tpd.DefDef)(implicit ctx: Context, info: TransformerInfo): tpd.Tree = {
     val sym = tree.symbol
     tree match {
-      case dd@DefDef(name, tparams, vparamss0, tpt, rhs0)
-        if (sym.isEffectivelyFinal) && !((sym is Flags.Accessor) || (rhs0 eq EmptyTree) || (sym is Flags.Label)) =>
+      case dd@DefDef(name, tparams, vparamss0, tpt, _)
+        if (sym.isEffectivelyFinal) && !((sym is Flags.Accessor) || (dd.rhs eq EmptyTree) || (sym is Flags.Label)) =>
         val mandatory = sym.hasAnnotation(defn.TailrecAnnotationClass)
         atGroupEnd { implicit ctx: Context =>
 
@@ -104,7 +104,7 @@ class TailRec extends MiniPhaseTransform with DenotTransformer with FullParamete
             // now this speculatively transforms tree and throws away result in many cases
             val rhsSemiTransformed = {
               val transformer = new TailRecElimination(origMeth, owner, thisTpe, mandatory, label, abstractOverClass = defIsTopLevel)
-              val rhs = atGroupEnd(transformer.transform(rhs0)(_))
+              val rhs = atGroupEnd(transformer.transform(dd.rhs)(_))
               rewrote = transformer.rewrote
               rhs
             }
@@ -117,7 +117,7 @@ class TailRec extends MiniPhaseTransform with DenotTransformer with FullParamete
             } else {
               if (mandatory)
                 ctx.error("TailRec optimisation not applicable, method not tail recursive", dd.pos)
-              rhs0
+              dd.rhs
             }
           })
         }
@@ -210,7 +210,7 @@ class TailRec extends MiniPhaseTransform with DenotTransformer with FullParamete
           val reciever = noTailTransform(recv)
 
           val callTargs: List[tpd.Tree] =
-            if(abstractOverClass) {
+            if (abstractOverClass) {
               val classTypeArgs = recv.tpe.baseTypeWithArgs(enclosingClass).argInfos
               targs ::: classTypeArgs.map(x => ref(x.typeSymbol))
             } else targs

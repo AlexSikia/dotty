@@ -39,6 +39,7 @@ class ScalaSettings extends Settings.SettingGroup {
   val defines = PrefixSetting("-Dproperty=value", "-D", "Pass -Dproperty=value directly to the runtime system.")
   val toolcp = PathSetting("-toolcp", "Add to the runner classpath.", "")
   val nobootcp = BooleanSetting("-nobootcp", "Do not use the boot classpath for the scala jars.")
+  val strict = BooleanSetting("-strict", "Use strict type rules, which means some formerly legal code does not typecheck anymore.")
 
   val argfiles = BooleanSetting("@<file>", "A text file containing compiler arguments (options and source files)")
   val classpath = PathSetting("-classpath", "Specify where to find user class files.", defaultClasspath) withAbbreviation "-cp"
@@ -150,6 +151,7 @@ class ScalaSettings extends Settings.SettingGroup {
   val YnoDeepSubtypes = BooleanSetting("-Yno-deep-subtypes", "throw an exception on deep subtyping call stacks.")
   val YprintSyms = BooleanSetting("-Yprint-syms", "when printing trees print info in symbols instead of corresponding info in trees.")
   val Yspecialize = StringSetting("-Yspecialize","all","Specialize all methods.", "all") // TODO remove default value
+  val YtestPickler = BooleanSetting("-Ytest-pickler", "self-test for pickling functionality; should be used with -Ystop-after:pickler")
   def stop = YstopAfter
 
   /** Area-specific debug output.
@@ -169,7 +171,7 @@ class ScalaSettings extends Settings.SettingGroup {
   val Ytyperdebug = BooleanSetting("-Ytyper-debug", "Trace all type assignments.")
   val Ypatmatdebug = BooleanSetting("-Ypatmat-debug", "Trace pattern matching translation.")
   val Yexplainlowlevel = BooleanSetting("-Yexplain-lowlevel", "When explaining type errors, show types at a lower level.")
-  val YnoDoubleBindings = BooleanSetting("-YnoDoubleBindings", "Assert no namedtype is bound twice (should be enabled only if program is error-free).")
+  val YnoDoubleBindings = BooleanSetting("-Yno-double-bindings", "Assert no namedtype is bound twice (should be enabled only if program is error-free).")
 
   val optimise = BooleanSetting("-optimise", "Generates faster bytecode by applying optimisations to the program") withAbbreviation "-optimize"
 

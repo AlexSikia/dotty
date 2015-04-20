@@ -11,7 +11,7 @@ import config.Config.summarizeDepth
 import scala.annotation.switch
 
 class PlainPrinter(_ctx: Context) extends Printer {
-  protected[this] implicit val ctx: Context = _ctx
+  protected[this] implicit def ctx: Context = _ctx
 
   protected def maxToTextRecursions = 100
 
@@ -33,6 +33,21 @@ class PlainPrinter(_ctx: Context) extends Printer {
     ctx.warning("Exceeded recursion depth attempting to print.")
     (new Throwable).printStackTrace
   }
+
+  /** If true, tweak output so it is the same before and after pickling */
+  protected def homogenizedView: Boolean = ctx.settings.YtestPickler.value
+
+  def homogenize(tp: Type): Type =
+    if (homogenizedView)
+      tp match {
+        case tp: TypeVar if tp.isInstantiated => homogenize(tp.instanceOpt)
+        case AndType(tp1, tp2) => homogenize(tp1) & homogenize(tp2)
+        case OrType(tp1, tp2) => homogenize(tp1) | homogenize(tp2)
+        case _ =>
+          val tp1 = tp.simplifyApply
+          if (tp1 eq tp) tp else homogenize(tp1)
+      }
+    else tp
 
   /** Render elements alternating with `sep` string */
   protected def toText(elems: Traversable[Showable], sep: String) =
@@ -86,20 +101,18 @@ class PlainPrinter(_ctx: Context) extends Printer {
    */
   private def refinementChain(tp: Type): List[Type] =
     tp :: (tp match {
-      case RefinedType(parent, _) => refinementChain(parent)
+      case RefinedType(parent, _) => refinementChain(parent.stripTypeVar)
       case _ => Nil
     })
 
   def toText(tp: Type): Text = controlled {
-    tp match {
+    homogenize(tp) match {
       case tp: TypeType =>
         toTextRHS(tp)
-      case tp: TermRef if !tp.denotationIsCurrent =>
+      case tp: TermRef if !tp.denotationIsCurrent || tp.symbol.is(Module) =>
         toTextRef(tp) ~ ".type"
       case tp: TermRef if tp.denot.isOverloaded =>
         "<overloaded " ~ toTextRef(tp) ~ ">"
-      case tp: TermRef if tp.symbol is Module =>
-        toText(tp.underlying) ~ ".type"
       case tp: SingletonType =>
         toText(tp.underlying) ~ "(" ~ toTextRef(tp) ~ ")"
       case tp: TypeRef =>
@@ -146,9 +159,9 @@ class PlainPrinter(_ctx: Context) extends Printer {
           toTextLocal(tp.instanceOpt) ~ "'" // debug for now, so that we can see where the TypeVars are.
         else {
           val constr = ctx.typerState.constraint
-          val bounds = 
-            if (constr.contains(tp)) constr.fullBounds(tp.origin) 
-            else TypeBounds.empty 
+          val bounds =
+            if (constr.contains(tp)) constr.fullBounds(tp.origin)
+            else TypeBounds.empty
           "(" ~ toText(tp.origin) ~ "?" ~ toText(bounds) ~ ")"
         }
       case _ =>
@@ -249,8 +262,8 @@ class PlainPrinter(_ctx: Context) extends Printer {
           else " = "
           eql ~ toText(lo)
         } else
-          (if (lo == defn.NothingType) Text() else " >: " ~ toText(lo)) ~
-            (if (hi == defn.AnyType) Text() else " <: " ~ toText(hi))
+          (if (lo isRef defn.NothingClass) Text() else " >: " ~ toText(lo)) ~
+            (if (hi isRef defn.AnyClass) Text() else " <: " ~ toText(hi))
       case tp @ ClassInfo(pre, cls, cparents, decls, selfInfo) =>
         val preText = toTextLocal(pre)
         val (tparams, otherDecls) = decls.toList partition treatAsTypeParam
@@ -341,7 +354,8 @@ class PlainPrinter(_ctx: Context) extends Printer {
 
   def toText(sym: Symbol): Text =
     (kindString(sym) ~~ {
-      if (hasMeaninglessName(sym)) simpleNameString(sym.owner) + idString(sym)
+      if (sym.isAnonymousClass) toText(sym.info.parents, " with ") ~ "{...}"
+      else if (hasMeaninglessName(sym)) simpleNameString(sym.owner) + idString(sym)
       else nameString(sym)
     }).close
 

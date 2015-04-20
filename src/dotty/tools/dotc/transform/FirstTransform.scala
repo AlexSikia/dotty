@@ -19,6 +19,7 @@ import DenotTransformers._
 import typer.Checking
 import Names.Name
 import NameOps._
+import StdNames._
 
 
 /** The first tree transform
@@ -34,6 +35,10 @@ class FirstTransform extends MiniPhaseTransform with IdentityDenotTransformer wi
   import ast.tpd._
 
   override def phaseName = "firstTransform"
+  
+  override def runsAfter = Set(classOf[typer.InstChecks]) 
+    // This phase makes annotations disappear in types, so InstChecks should
+    // run before so that it can get at all annotations.
 
   def transformInfo(tp: Type, sym: Symbol)(implicit ctx: Context): Type = tp
 
@@ -72,10 +77,13 @@ class FirstTransform extends MiniPhaseTransform with IdentityDenotTransformer wi
       case Nil => Nil
     }
 
-    def newCompanion(name: TermName): Thicket = {
+    def newCompanion(name: TermName, forClass: Symbol): Thicket = {
       val modul = ctx.newCompleteModuleSymbol(ctx.owner, name, Synthetic, Synthetic,
         defn.ObjectClass.typeRef :: Nil, Scopes.newScope)
+      val mc = modul.moduleClass
       if (ctx.owner.isClass) modul.enteredAfter(thisTransformer)
+      ctx.synthesizeCompanionMethod(nme.COMPANION_CLASS_METHOD, forClass, mc).enteredAfter(thisTransformer)
+      ctx.synthesizeCompanionMethod(nme.COMPANION_MODULE_METHOD, mc, forClass).enteredAfter(thisTransformer)
       ModuleDef(modul, Nil)
     }
 
@@ -83,19 +91,19 @@ class FirstTransform extends MiniPhaseTransform with IdentityDenotTransformer wi
       case stat: TypeDef if singleClassDefs contains stat.name =>
         val objName = stat.name.toTermName
         val nameClash = stats.exists {
-          case other: MemberDef => 
+          case other: MemberDef =>
             other.name == objName && other.symbol.info.isParameterless
           case _ =>
             false
         }
         val uniqueName = if (nameClash) objName.avoidClashName else objName
-        Thicket(stat :: newCompanion(uniqueName).trees)
+        Thicket(stat :: newCompanion(uniqueName, stat.symbol).trees)
       case stat => stat
     }
 
     def skipJava(stats: List[Tree]): List[Tree] = // packages get a JavaDefined flag. Dont skip them
       stats.filter(t => !(t.symbol is(Flags.JavaDefined, Flags.Package)))
-    
+
     addMissingCompanions(reorder(skipJava(stats)))
   }
 
@@ -119,7 +127,7 @@ class FirstTransform extends MiniPhaseTransform with IdentityDenotTransformer wi
       /*
        A this reference hide in a self ident, and be subsequently missed
         when deciding on whether outer accessors are needed and computing outer paths.
-        sWe do this normalization directly after Typer, because during typer the
+        We do this normalization directly after Typer, because during typer the
         ident should rest available for hyperlinking.*/
       This(tpe.cls).withPos(tree.pos)
     case _ => normalizeType(tree)

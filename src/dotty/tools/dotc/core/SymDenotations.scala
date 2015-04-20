@@ -41,15 +41,19 @@ trait SymDenotations { this: Context =>
 
   def stillValid(denot: SymDenotation): Boolean =
     if (denot is ValidForever) true
-    else try {
-      val owner = denot.owner.denot
-      stillValid(owner) && (
-           !owner.isClass
-        || (owner.unforcedDecls.lookupAll(denot.name) contains denot.symbol)
-        || denot.isSelfSym
-        )
-    } catch {
-      case ex: StaleSymbol => false
+    else {
+      val initial = denot.initial
+      if (initial ne denot)
+        ctx.withPhase(initial.validFor.firstPhaseId).stillValid(initial.asSymDenotation)
+      else try {
+        val owner = denot.owner.denot
+        stillValid(owner) && (
+          !owner.isClass
+          || (owner.unforcedDecls.lookupAll(denot.name) contains denot.symbol)
+          || denot.isSelfSym)
+      } catch {
+        case ex: StaleSymbol => false
+      }
     }
 }
 
@@ -69,6 +73,12 @@ object SymDenotations {
     //assert(symbol.id != 4940, name)
 
     override def hasUniqueSym: Boolean = exists
+
+    /** Debug only
+    override def validFor_=(p: Period) = {
+      super.validFor_=(p)
+    }
+    */
 
     // ------ Getting and setting fields -----------------------------
 
@@ -95,7 +105,7 @@ object SymDenotations {
     private def adaptFlags(flags: FlagSet) = if (isType) flags.toTypeFlags else flags.toTermFlags
 
     /** Update the flag set */
-    private final def flags_=(flags: FlagSet): Unit =
+    final def flags_=(flags: FlagSet): Unit =
       myFlags = adaptFlags(flags)
 
     /** Set given flags(s) of this denotation */
@@ -171,13 +181,13 @@ object SymDenotations {
       myInfo = tp
     }
 
-    /** The name, except 
-     *   - if this is a module class, strip the module class suffix 
-     *   - if this is a companion object with a clash-avoiding name, strip the 
+    /** The name, except
+     *   - if this is a module class, strip the module class suffix
+     *   - if this is a companion object with a clash-avoiding name, strip the
      *     "avoid clash" suffix
      */
     def effectiveName(implicit ctx: Context) =
-      if (this is ModuleClass) name.stripModuleClassSuffix 
+      if (this is ModuleClass) name.stripModuleClassSuffix
       else name.stripAvoidClashSuffix
 
     /** The privateWithin boundary, NoSymbol if no boundary is given.
@@ -195,7 +205,7 @@ object SymDenotations {
 
     /** Update the annotations of this denotation */
     private[core] final def annotations_=(annots: List[Annotation]): Unit =
-       myAnnotations = annots
+      myAnnotations = annots
 
     /** Does this denotation have an annotation matching the given class symbol? */
     final def hasAnnotation(cls: Symbol)(implicit ctx: Context) =
@@ -239,11 +249,11 @@ object SymDenotations {
     final def ensureCompleted()(implicit ctx: Context): Unit = info
 
     /** The symbols defined in this class or object.
-     *  Careful! This coes not force the type, so is compilation order dependent.
+     *  Careful! This does not force the type, so is compilation order dependent.
      *  This method should be used only in the following circumstances:
-     *  
-     *  1. When accessing type parameters or type parameter accessors (both are entered before 
-     *     completion). 
+     *
+     *  1. When accessing type parameters or type parameter accessors (both are entered before
+     *     completion).
      *  2. When obtaining the current scope in order to enter, rename or delete something there.
      *  3. When playing it safe in order not to raise CylicReferences, e.g. for printing things
      *     or taking more efficient shortcuts (e.g. the stillValid test).
@@ -271,7 +281,7 @@ object SymDenotations {
     /** The name with which the denoting symbol was created */
     final def originalName(implicit ctx: Context) = {
       val d = initial.asSymDenotation
-      if (d is ExpandedName) d.name.unexpandedName() else d.name // !!!DEBUG, was: effectiveName
+      if (d is ExpandedName) d.name.unexpandedName else d.name // !!!DEBUG, was: effectiveName
     }
 
     /** The encoded full path name of this denotation, where outer names and inner names
@@ -291,7 +301,6 @@ object SymDenotations {
         val fn = owner.fullNameSeparated(separator) ++ sep ++ name
         if (isType) fn.toTypeName else fn.toTermName
       }
-
 
     /** The encoded flat name of this denotation, where joined names are separated by `separator` characters. */
     def flatName(separator: Char = '$')(implicit ctx: Context): Name =
@@ -338,7 +347,7 @@ object SymDenotations {
 
     /** Is this symbol the root class or its companion object? */
     final def isRoot: Boolean =
-      (name.toTermName == nme.ROOT) && (owner eq NoSymbol)
+      (name.toTermName == nme.ROOT || name == nme.ROOTPKG) && (owner eq NoSymbol)
 
     /** Is this symbol the empty package class or its companion object? */
     final def isEmptyPackage(implicit ctx: Context): Boolean =
@@ -353,6 +362,9 @@ object SymDenotations {
 
     final def isAnonymousFunction(implicit ctx: Context) =
       this.symbol.is(Method) && (initial.asSymDenotation.name startsWith nme.ANON_FUN)
+
+    final def isAnonymousModuleVal(implicit ctx: Context) =
+      this.symbol.is(ModuleVal) && (initial.asSymDenotation.name startsWith nme.ANON_CLASS)
 
     /** Is symbol a primitive value class? */
     def isPrimitiveValueClass(implicit ctx: Context) = defn.ScalaValueClasses contains symbol
@@ -420,7 +432,7 @@ object SymDenotations {
 
     /** Is this denotation static (i.e. with no outer instance)? */
     final def isStatic(implicit ctx: Context) =
-      (this is JavaStatic) || this.exists && owner.isStaticOwner
+      (this is JavaStatic) || this.exists && owner.isStaticOwner || this.isRoot
 
     /** Is this a package class or module class that defines static symbols? */
     final def isStaticOwner(implicit ctx: Context): Boolean =
@@ -430,7 +442,9 @@ object SymDenotations {
     final def isCoDefinedWith(that: Symbol)(implicit ctx: Context) =
       (this.effectiveOwner == that.effectiveOwner) &&
       (  !(this.effectiveOwner is PackageClass)
-      || { val thisFile = this.symbol.associatedFile
+        || this.isAbsent || that.isAbsent
+        || { // check if they are defined in the same file(or a jar)
+           val thisFile = this.symbol.associatedFile
            val thatFile = that.symbol.associatedFile
            (  thisFile == null
            || thatFile == null
@@ -451,8 +465,9 @@ object SymDenotations {
       }
     }
 
-    /** Is this a user defined "def" method? Excluded are accessors. */
-    final def isSourceMethod(implicit ctx: Context) = this is (Method, butNot = AccessorOrLabel)
+    /** Is this a user defined "def" method? Excluded are accessors and anonymous functions. */
+    final def isSourceMethod(implicit ctx: Context) =
+      this.is(Method, butNot = AccessorOrLabel) && !isAnonymousFunction
 
     /** Is this a setter? */
     final def isGetter(implicit ctx: Context) =
@@ -490,13 +505,18 @@ object SymDenotations {
      */
     def derivesFrom(base: Symbol)(implicit ctx: Context) = false
 
-    /** Is this symbol a class that does not extend `AnyVal`? */
-    final def isNonValueClass(implicit ctx: Context): Boolean =
-      isClass && !derivesFrom(defn.AnyValClass) && (symbol ne defn.NothingClass)
+    /** Is this symbol a class that extends `AnyVal`? */
+    final def isValueClass(implicit ctx: Context): Boolean = {
+      val di = this.initial.asSymDenotation
+      di.isClass &&
+      di.derivesFrom(defn.AnyValClass)(ctx.withPhase(di.validFor.firstPhaseId))
+        // We call derivesFrom at the initial phase both because AnyVal does not exist
+        // after Erasure and to avoid cyclic references caused by forcing denotations
+    }
 
     /** Is this symbol a class references to which that are supertypes of null? */
     final def isNullableClass(implicit ctx: Context): Boolean =
-      isNonValueClass && !(this is ModuleClass)
+      isClass && !isValueClass && !(this is ModuleClass)
 
     /** Is this definition accessible as a member of tree with type `pre`?
      *  @param pre          The type of the tree from which the selection is made
@@ -638,7 +658,7 @@ object SymDenotations {
      */
     /** The class implementing this module, NoSymbol if not applicable. */
     final def moduleClass(implicit ctx: Context): Symbol = {
-      def notFound = {println(s"missing module class for $name: $myInfo"); NoSymbol}
+      def notFound = { println(s"missing module class for $name: $myInfo"); NoSymbol }
       if (this is ModuleVal)
         myInfo match {
           case info: TypeRef           => info.symbol
@@ -705,6 +725,9 @@ object SymDenotations {
      *  but in turn the enclosing class of the latter. This reflects
      *  the context created by `Context#superCallContext`, `Contect#thisCallArgContext`
      *  for these definitions.
+     *
+     *  Note, that as packages have ClassSymbols, top level classes will have an `enclosingClass`
+     *  with Package flag set.
      */
     final def enclosingClass(implicit ctx: Context): Symbol = {
       def enclClass(sym: Symbol, skip: Boolean): Symbol = {
@@ -738,7 +761,8 @@ object SymDenotations {
     final def enclosingMethod(implicit ctx: Context): Symbol =
       if (this is (Method, butNot = Label)) symbol
       else if (this.isClass) primaryConstructor
-      else owner.enclosingMethod
+      else if (this.exists) owner.enclosingMethod
+      else NoSymbol
 
     /** The top-level class containing this denotation,
      *  except for a toplevel module, where its module class is returned.
@@ -760,18 +784,36 @@ object SymDenotations {
      *  and which is also defined in the same scope and compilation unit.
      *  NoSymbol if this module does not exist.
      */
-    final def companionModule(implicit ctx: Context): Symbol =
-      if (name == tpnme.ANON_CLASS)
-        NoSymbol // avoid forcing anon classes, this might cause cyclic reference errors
-      else
-        companionNamed(effectiveName.moduleClassName).sourceModule
+    final def companionModule(implicit ctx: Context): Symbol = {
+      if (this.flagsUNSAFE is Flags.Module) this.sourceModule
+      else {
+        val companionMethod = info.decls.denotsNamed(nme.COMPANION_MODULE_METHOD, selectPrivate).first
+        if (companionMethod.exists)
+          companionMethod.info.resultType.classSymbol.sourceModule
+        else
+          NoSymbol
+      }
+    }
+
 
     /** The class with the same (type-) name as this module or module class,
-     *  and which is also defined in the same scope and compilation unit.
-     *  NoSymbol if this class does not exist.
-     */
-    final def companionClass(implicit ctx: Context): Symbol =
-      companionNamed(effectiveName.toTypeName)
+      *  and which is also defined in the same scope and compilation unit.
+      *  NoSymbol if this class does not exist.
+      */
+    final def companionClass(implicit ctx: Context): Symbol = {
+      val companionMethod = info.decls.denotsNamed(nme.COMPANION_CLASS_METHOD, selectPrivate).first
+
+      if (companionMethod.exists)
+        companionMethod.info.resultType.classSymbol
+      else
+        NoSymbol
+    }
+
+    final def scalacLinkedClass(implicit ctx: Context): Symbol =
+      if (this is ModuleClass) companionNamed(effectiveName.toTypeName)
+      else if (this.isClass) companionNamed(effectiveName.moduleClassName).sourceModule.moduleClass
+      else NoSymbol
+
 
     /** Find companion class symbol with given name, or NoSymbol if none exists.
      *  Three alternative strategies:
@@ -969,7 +1011,7 @@ object SymDenotations {
       s"$kindString $name"
     }
 
-    def debugString = toString+"#"+symbol.id // !!! DEBUG
+    def debugString = toString + "#" + symbol.id // !!! DEBUG
 
     // ----- copies and transforms  ----------------------------------------
 
@@ -1064,8 +1106,8 @@ object SymDenotations {
 
     private var firstRunId: RunId = initRunId
 
-    /** If caches influenced by parent classes are still valid, the denotation
-     *  itself, otherwise a freshly initialized copy.
+    /** invalidate caches influenced by parent classes if one of the parents
+     *  is younger than the denotation itself.
      */
     override def syncWithParents(implicit ctx: Context): SingleDenotation = {
       def isYounger(tref: TypeRef) = tref.symbol.denot match {
@@ -1091,7 +1133,7 @@ object SymDenotations {
     }
 
     /** Invalidate all caches and fields that depend on base classes and their contents */
-    private def invalidateInheritedInfo(): Unit = {
+    override def invalidateInheritedInfo(): Unit = {
       myBaseClasses = null
       mySuperClassBits = null
       myMemberFingerPrint = FingerPrint.unknown
@@ -1135,7 +1177,7 @@ object SymDenotations {
     private[this] var myBaseClasses: List[ClassSymbol] = null
     private[this] var mySuperClassBits: BitSet = null
 
-	  /** Invalidate baseTypeRefCache, baseClasses and superClassBits on new run */
+    /** Invalidate baseTypeRefCache, baseClasses and superClassBits on new run */
     private def checkBasesUpToDate()(implicit ctx: Context) =
       if (baseTypeRefValid != ctx.runId) {
         baseTypeRefCache = new java.util.HashMap[CachedType, Type]
@@ -1253,7 +1295,7 @@ object SymDenotations {
       myMemberCache
     }
 
-    /** Enter a symbol in current scope.
+    /** Enter a symbol in current scope, and future scopes of same denotation.
      *  Note: We require that this does not happen after the first time
      *  someone does a findMember on a subclass.
      *  @param scope   The scope in which symbol should be entered.
@@ -1261,7 +1303,13 @@ object SymDenotations {
      */
     def enter(sym: Symbol, scope: Scope = EmptyScope)(implicit ctx: Context): Unit = {
       val mscope = scope match {
-        case scope: MutableScope => scope
+        case scope: MutableScope =>
+          // if enter gets a scope as an argument,
+          // than this is a scope that will eventually become decls of this symbol.
+          // And this should only happen if this is first time the scope of symbol
+          // is computed, ie symbol yet has no future.
+          assert(this.nextInRun == this)
+          scope
         case _ => unforcedDecls.openForMutations
       }
       if (this is PackageClass) {
@@ -1273,11 +1321,15 @@ object SymDenotations {
         }
       }
       enterNoReplace(sym, mscope)
+      val nxt = this.nextInRun
+      if (nxt.validFor.code > this.validFor.code) {
+        this.nextInRun.asSymDenotation.asClass.enter(sym)
+      }
     }
 
     /** Enter a symbol in given `scope` without potentially replacing the old copy. */
     def enterNoReplace(sym: Symbol, scope: MutableScope)(implicit ctx: Context): Unit = {
-      require(!(this is Frozen))
+      require((sym.denot.flagsUNSAFE is Private) ||  !(this is Frozen))
       scope.enter(sym)
 
       if (myMemberFingerPrint != FingerPrint.unknown)

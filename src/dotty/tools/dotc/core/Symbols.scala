@@ -161,6 +161,17 @@ trait Symbols { this: Context =>
           owner.thisType, modcls, parents, decls, TermRef.withSymAndName(owner.thisType, module, name)),
         privateWithin, coord, assocFile)
 
+  val companionMethodFlags = Flags.Synthetic | Flags.Private | Flags.Method
+
+  def synthesizeCompanionMethod(name: Name, target: SymDenotation, owner: SymDenotation)(implicit ctx: Context) =
+    if (owner.exists && target.exists && !owner.isAbsent && !target.isAbsent) {
+      val existing = owner.unforcedDecls.lookup(name)
+
+      existing.orElse{
+        ctx.newSymbol(owner.symbol, name, companionMethodFlags , ExprType(target.typeRef))
+      }
+    } else NoSymbol
+
   /** Create a package symbol with associated package class
    *  from its non-info fields and a lazy type for loading the package's members.
    */
@@ -420,9 +431,12 @@ object Symbols {
     def filter(p: Symbol => Boolean): Symbol = if (p(this)) this else NoSymbol
 
     /** Is this symbol a user-defined value class? */
-    final def isDerivedValueClass(implicit ctx: Context): Boolean =
+    final def isDerivedValueClass(implicit ctx: Context): Boolean = {
+      this.derivesFrom(defn.AnyValClass)(ctx.withPhase(denot.validFor.firstPhaseId))
+        // Simulate ValueClasses.isDerivedValueClass
       false  // will migrate to ValueClasses.isDerivedValueClass;
                // unsupported value class code will continue to use this stub while it exists
+    }
 
     /** The current name of this symbol */
     final def name(implicit ctx: Context): ThisName = denot.name.asInstanceOf[ThisName]
@@ -462,7 +476,7 @@ object Symbols {
 
     override def toString: String =
       if (lastDenot == null) s"Naked$prefixString#$id"
-      else lastDenot.toString// +"#"+id // !!! DEBUG
+      else lastDenot.toString// + "#" + id // !!! DEBUG
 
     def toText(printer: Printer): Text = printer.toText(this)
 

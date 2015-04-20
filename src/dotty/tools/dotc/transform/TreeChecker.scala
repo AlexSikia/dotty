@@ -35,8 +35,62 @@ import scala.util.control.NonFatal
  *   - After typer, identifiers and select nodes refer to terms only (all types should be
  *     represented as TypeTrees then).
  */
-class TreeChecker {
+class TreeChecker extends Phase with SymTransformer {
   import ast.tpd._
+
+
+  private val seenClasses = collection.mutable.HashMap[String, Symbol]()
+  private val seenModuleVals = collection.mutable.HashMap[String, Symbol]()
+
+  def printError(str: String) = {
+    println(Console.RED + "[error] " + Console.WHITE  + str)
+  }
+
+  val NoSuperClass = Trait | Package
+
+  def testDuplicate(sym: Symbol, registry: mutable.Map[String, Symbol], typ: String)(implicit ctx: Context) = {
+    val name = sym.fullName.toString
+    if (registry.contains(name))
+      if (this.flatClasses || !(sym.isAnonymousFunction || sym.isAnonymousClass || sym.isAnonymousModuleVal))
+        printError(s"$typ defined twice $sym ${sym.id} ${registry(name).id}")
+    registry(name) = sym
+  }
+
+  def checkCompanion(symd: SymDenotation)(implicit ctx: Context): Unit = {
+    val cur = symd.linkedClass
+    val prev = ctx.atPhase(ctx.phase.prev) {
+      ct => {
+        implicit val ctx: Context = ct.withMode(Mode.FutureDefsOK)
+        symd.symbol.linkedClass
+      }
+    }
+
+    if (prev.exists)
+      assert(cur.exists, i"companion disappeared from $symd")
+  }
+
+  def transformSym(symd: SymDenotation)(implicit ctx: Context): SymDenotation = {
+    val sym = symd.symbol
+
+    if (sym.isClass && !sym.isAbsent) {
+      val validSuperclass = defn.ScalaValueClasses.contains(sym) ||  defn.syntheticCoreClasses.contains(sym) ||
+        (sym eq defn.ObjectClass) || (sym is NoSuperClass) || (sym.asClass.superClass.exists)
+      if (!validSuperclass)
+        printError(s"$sym has no superclass set")
+
+      testDuplicate(sym, seenClasses, "class")
+    }
+
+    checkCompanion(symd)
+
+    symd
+  }
+
+  def phaseName: String = "Ycheck"
+
+  def run(implicit ctx: Context): Unit = {
+    check(ctx.allPhases, ctx)
+  }
 
   private def previousPhases(phases: List[Phase])(implicit ctx: Context): List[Phase] = phases match {
     case (phase: TreeTransformer) :: phases1 =>
@@ -76,7 +130,7 @@ class TreeChecker {
         val sym = tree.symbol
         everDefinedSyms.get(sym) match {
           case Some(t)  =>
-            if(t ne tree)
+            if (t ne tree)
               ctx.warning(i"symbol ${sym.fullName} is defined at least twice in different parts of AST")
             // should become an error
           case None =>
@@ -84,7 +138,7 @@ class TreeChecker {
         }
         assert(!nowDefinedSyms.contains(sym), i"doubly defined symbol: ${sym.fullName} in $tree")
 
-        if(ctx.settings.YcheckMods.value) {
+        if (ctx.settings.YcheckMods.value) {
           tree match {
             case t: MemberDef =>
               if (t.name ne sym.name) ctx.warning(s"symbol ${sym.fullName} name doesn't correspond to AST: ${t}")
@@ -143,18 +197,20 @@ class TreeChecker {
       phasesToCheck.foreach(_.checkPostCondition(res))
       res
     }
-    
+
     /** Check that PolyParams and MethodParams refer to an enclosing type */
     def checkNoOrphans(tp: Type)(implicit ctx: Context) = new TypeMap() {
       val definedBinders = mutable.Set[Type]()
       def apply(tp: Type): Type = {
         tp match {
-          case tp: BindingType => 
+          case tp: BindingType =>
             definedBinders += tp
             mapOver(tp)
             definedBinders -= tp
           case tp: ParamType =>
             assert(definedBinders.contains(tp.binder), s"orphan param: $tp")
+          case tp: TypeVar =>
+            apply(tp.underlying)
           case _ =>
             mapOver(tp)
         }
@@ -233,8 +289,8 @@ class TreeChecker {
       super.typedStats(trees, exprOwner)
     }
 
-    override def ensureNoLocalRefs(block: Block, pt: Type, forcedDefined: Boolean = false)(implicit ctx: Context): Tree =
-      block
+    override def ensureNoLocalRefs(tree: Tree, pt: Type, localSyms: => List[Symbol], forcedDefined: Boolean = false)(implicit ctx: Context): Tree =
+      tree
 
     override def adapt(tree: Tree, pt: Type, original: untpd.Tree = untpd.EmptyTree)(implicit ctx: Context) = {
       def isPrimaryConstructorReturn =

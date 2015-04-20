@@ -83,8 +83,8 @@ object StdNames {
     final val HASHkw: N      = kw("#")
     final val ATkw: N        = kw("@")
 
-    val ANON_CLASS: N            = "$anon"
-    val ANON_FUN: N              = "$anonfun"
+    val ANON_CLASS: N                 = "$anon"
+    val ANON_FUN: N                   = "$anonfun"
     val BITMAP_PREFIX: N              = "bitmap$"
     val BITMAP_NORMAL: N              = BITMAP_PREFIX         // initialization bitmap for public/protected lazy vals
     val BITMAP_TRANSIENT: N           = BITMAP_PREFIX + "trans$"    // initialization bitmap for transient lazy vals
@@ -100,7 +100,6 @@ object StdNames {
     val EXPAND_SEPARATOR: N           = "$$"
     val IMPL_CLASS_SUFFIX: N          = "$class"
     val IMPORT: N                     = "<import>"
-    val INHERITED: N                  = "(inherited)"  // tag to be used until we have proper name kinds
     val INTERPRETER_IMPORT_WRAPPER: N = "$iw"
     val INTERPRETER_LINE_PREFIX: N    = "line"
     val INTERPRETER_VAR_PREFIX: N     = "res"
@@ -111,18 +110,22 @@ object StdNames {
     val MODULE_VAR_SUFFIX: N          = "$module"
     val NAME_JOIN: N                  = NameTransformer.NAME_JOIN_STRING
     val USCORE_PARAM_PREFIX: N        = "_$"
+    val OPS_PACKAGE: N                = "<special-ops>"
     val OVERLOADED: N                 = "<overloaded>"
     val PACKAGE: N                    = "package"
     val PACKAGE_CLS: N                = "package$"
     val PROTECTED_PREFIX: N           = "protected$"
     val PROTECTED_SET_PREFIX: N       = PROTECTED_PREFIX + "set"
     val ROOT: N                       = "<root>"
+    val SHADOWED: N                   = "(shadowed)"  // tag to be used until we have proper name kinds
     val SINGLETON_SUFFIX: N           = ".type"
     val SPECIALIZED_SUFFIX: N         = "$sp"
     val SUPER_PREFIX: N               = "super$"
     val WHILE_PREFIX: N               = "while$"
     val DEFAULT_EXCEPTION_NAME: N     = "ex$"
     val INITIALIZER_PREFIX: N         = "initial$"
+    val COMPANION_MODULE_METHOD: N    = "companion$module"
+    val COMPANION_CLASS_METHOD: N     = "companion$class"
 
     // value types (and AnyRef) are all used as terms as well
     // as (at least) arguments to the @specialize annotation.
@@ -706,7 +709,7 @@ object StdNames {
   class ScalaTypeNames extends ScalaNames[TypeName] {
     protected implicit def fromString(s: String): TypeName = typeName(s)
 
-    @switch def syntheticTypeParamName(i: Int): TypeName = "T"+i
+    @switch def syntheticTypeParamName(i: Int): TypeName = "T" + i
 
     def syntheticTypeParamNames(num: Int): List[TypeName] =
       (0 until num).map(syntheticTypeParamName)(breakOut)

@@ -152,7 +152,7 @@ class SymbolLoaders {
 
     def doComplete(root: SymDenotation)(implicit ctx: Context): Unit = {
       assert(root is PackageClass, root)
- 	    def maybeModuleClass(classRep: ClassPath#ClassRep) = classRep.name.last == '$'
+        def maybeModuleClass(classRep: ClassPath#ClassRep) = classRep.name.last == '$'
       val pre = root.owner.thisType
       root.info = ClassInfo(pre, root.symbol.asClass, Nil, currentDecls, pre select sourceModule)
       if (!sourceModule.isCompleted)
@@ -217,7 +217,7 @@ abstract class SymbolLoader extends LazyType {
           denot.markAbsent()
       postProcess(root)
       if (!root.isRoot)
-        postProcess(root.linkedClass.denot)
+        postProcess(root.scalacLinkedClass.denot)
     }
   }
 }
@@ -226,10 +226,10 @@ class ClassfileLoader(val classfile: AbstractFile) extends SymbolLoader {
 
   override def sourceFileOrNull: AbstractFile = classfile
 
-  def description = "class file "+ classfile.toString
+  def description = "class file " + classfile.toString
 
   def rootDenots(rootDenot: ClassDenotation)(implicit ctx: Context): (ClassDenotation, ClassDenotation) = {
-    val linkedDenot = rootDenot.linkedClass.denot match {
+    val linkedDenot = rootDenot.scalacLinkedClass.denot match {
       case d: ClassDenotation => d
       case d =>
         // this can happen if the companion if shadowed by a val or type
@@ -258,7 +258,7 @@ class ClassfileLoader(val classfile: AbstractFile) extends SymbolLoader {
 }
 
 class SourcefileLoader(val srcfile: AbstractFile) extends SymbolLoader {
-  def description = "source file "+ srcfile.toString
+  def description = "source file " + srcfile.toString
   override def sourceFileOrNull = srcfile
   def doComplete(root: SymDenotation)(implicit ctx: Context): Unit = unsupported("doComplete")
 }

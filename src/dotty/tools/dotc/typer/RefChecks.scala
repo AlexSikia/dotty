@@ -71,6 +71,17 @@ object RefChecks {
     }
   }
 
+  /** Check that self type of this class conforms to self types of parents */
+  private def checkSelfType(clazz: Symbol)(implicit ctx: Context): Unit = clazz.info match {
+    case cinfo: ClassInfo =>
+      for (parent <- cinfo.classParents) {
+        val pself = parent.givenSelfType.asSeenFrom(clazz.thisType, parent.classSymbol)
+        if (pself.exists && !(cinfo.selfType <:< pself))
+          ctx.error(d"illegal inheritance: self type ${cinfo.selfType} of $clazz does not conform to self type $pself of parent ${parent.classSymbol}", clazz.pos)
+      }
+    case _ =>
+  }
+
   // Override checking ------------------------------------------------------------
 
   /** 1. Check all members of class `clazz` for overriding conditions.
@@ -395,7 +406,8 @@ object RefChecks {
 
         for (member <- missing) {
           val memberSym = member.symbol
-          def undefined(msg: String) = abstractClassError(false, member.showDcl + " is not defined" + msg)
+          def undefined(msg: String) =
+            abstractClassError(false, member.showDcl + " is not defined" + msg)
           val underlying = memberSym.underlyingSymbol
 
           // Give a specific error message for abstract vars based on why it fails:
@@ -769,6 +781,7 @@ class RefChecks extends MiniPhase with SymTransformer { thisTransformer =>
     override def transformTemplate(tree: Template)(implicit ctx: Context, info: TransformerInfo) = {
       val cls = ctx.owner
       checkOverloadedRestrictions(cls)
+      checkSelfType(cls)
       checkAllOverrides(cls)
       checkAnyValSubclass(cls)
       tree
@@ -874,7 +887,7 @@ class RefChecks extends MiniPhase with SymTransformer { thisTransformer =>
       def onSyms[T](f: List[Symbol] => T) = f(List(receiver, actual))
 
       // @MAT normalize for consistency in error message, otherwise only part is normalized due to use of `typeSymbol`
-      def typesString = normalizeAll(qual.tpe.widen)+" and "+normalizeAll(other.tpe.widen)
+      def typesString = normalizeAll(qual.tpe.widen)+" and " + normalizeAll(other.tpe.widen)
 
       /* Symbols which limit the warnings we can issue since they may be value types */
       val isMaybeValue = Set[Symbol](AnyClass, AnyRefClass, AnyValClass, ObjectClass, ComparableClass, JavaSerializableClass)
@@ -1056,7 +1069,7 @@ class RefChecks extends MiniPhase with SymTransformer { thisTransformer =>
                                                       // FIXME: reconcile this check with one in resetAttrs
           case _ => checkUndesiredProperties(sym, tree.pos)
         }
-        if(sym.isJavaDefined)
+        if (sym.isJavaDefined)
           sym.typeParams foreach (_.cookJavaRawInfo())
         if (!tp.isHigherKinded && !skipBounds)
           checkBounds(tree, pre, sym.owner, sym.typeParams, args)
@@ -1100,7 +1113,7 @@ class RefChecks extends MiniPhase with SymTransformer { thisTransformer =>
           }
 
         case tpt@TypeTree() =>
-          if(tpt.original != null) {
+          if (tpt.original != null) {
             tpt.original foreach {
               case dc@TypeTreeWithDeferredRefCheck() =>
                 applyRefchecksToAnnotations(dc.check()) // #2416
@@ -1383,7 +1396,7 @@ class RefChecks extends MiniPhase with SymTransformer { thisTransformer =>
             tree
 
           case treeInfo.WildcardStarArg(_) if !isRepeatedParamArg(tree) =>
-            unit.error(tree.pos, "no `: _*' annotation allowed here\n"+
+            unit.error(tree.pos, "no `: _*' annotation allowed here\n" +
               "(such annotations are only allowed in arguments to *-parameters)")
             tree
 

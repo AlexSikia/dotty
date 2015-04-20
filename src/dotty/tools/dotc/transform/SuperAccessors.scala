@@ -72,10 +72,11 @@ class SuperAccessors extends MacroTransform with IdentityDenotTransformer { this
     private val accDefs = mutable.Map[Symbol, ListBuffer[Tree]]()
 
     private def storeAccessorDefinition(clazz: Symbol, tree: Tree) = {
-      val buf = accDefs.getOrElse(clazz, sys.error("no acc def buf for "+clazz))
+      val buf = accDefs.getOrElse(clazz, sys.error("no acc def buf for " + clazz))
       buf += tree
     }
 
+    /** Turn types which are not methodic into ExprTypes. */
     private def ensureMethodic(tpe: Type)(implicit ctx: Context) = tpe match {
       case tpe: MethodicType => tpe
       case _ => ExprType(tpe)
@@ -293,9 +294,17 @@ class SuperAccessors extends MacroTransform with IdentityDenotTransformer { this
           def transformTemplate = {
             val ownStats = new ListBuffer[Tree]
             accDefs(currentClass) = ownStats
-            val body1 = forwardParamAccessors(transformStats(impl.body, tree.symbol))
+            // write super accessors after parameters and type aliases (so
+            // that order is stable under pickling/unpickling)
+            val (params, rest) = impl.body span {
+              case td: TypeDef => !td.isClassDef
+              case vd: ValOrDefDef => vd.symbol.flags is ParamAccessor
+              case _ => false
+            }
+            ownStats ++= params
+            val rest1 = forwardParamAccessors(transformStats(rest, tree.symbol))
             accDefs -= currentClass
-            ownStats ++= body1
+            ownStats ++= rest1
             cpy.Template(impl)(body = ownStats.toList)
           }
           transformTemplate
@@ -369,9 +378,9 @@ class SuperAccessors extends MacroTransform with IdentityDenotTransformer { this
           }
           transformSelect
 
-        case tree @ DefDef(_, _, _, _, rhs) =>
+        case tree: DefDef =>
           cpy.DefDef(tree)(
-            rhs = if (isMethodWithExtension(sym)) withInvalidOwner(transform(rhs)) else transform(rhs))
+            rhs = if (isMethodWithExtension(sym)) withInvalidOwner(transform(tree.rhs)) else transform(tree.rhs))
 
         case TypeApply(sel @ Select(qual, name), args) =>
           mayNeedProtectedAccessor(sel, args, goToSuper = true)
@@ -545,7 +554,7 @@ class SuperAccessors extends MacroTransform with IdentityDenotTransformer { this
         assert(referencingClass.isClass, referencingClass)
         referencingClass
       }
-      else if(referencingClass.owner.enclosingClass.exists)
+      else if (referencingClass.owner.enclosingClass.exists)
         hostForAccessorOf(sym, referencingClass.owner.enclosingClass.asClass)
       else
         referencingClass

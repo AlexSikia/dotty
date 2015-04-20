@@ -120,11 +120,13 @@ object Denotations {
     /** Is this denotation overloaded? */
     final def isOverloaded = isInstanceOf[MultiDenotation]
 
-    /** The signature of the denotation */
+    /** The signature of the denotation. */
     def signature(implicit ctx: Context): Signature
 
-    /** Resolve overloaded denotation to pick the one with the given signature */
-    def atSignature(sig: Signature)(implicit ctx: Context): SingleDenotation
+    /** Resolve overloaded denotation to pick the one with the given signature
+     *  when seen from prefix `site`.
+     */
+    def atSignature(sig: Signature, site: Type = NoPrefix)(implicit ctx: Context): SingleDenotation
 
     /** The variant of this denotation that's current in the given context. */
     def current(implicit ctx: Context): Denotation
@@ -207,7 +209,7 @@ object Denotations {
      */
     def matchingDenotation(site: Type, targetType: Type)(implicit ctx: Context): SingleDenotation =
       if (isOverloaded)
-        atSignature(targetType.signature).matchingDenotation(site, targetType)
+        atSignature(targetType.signature, site).matchingDenotation(site, targetType)
       else if (exists && !site.memberInfo(symbol).matchesLoosely(targetType))
         NoDenotation
       else
@@ -343,8 +345,8 @@ object Denotations {
     final def validFor = denot1.validFor & denot2.validFor
     final def isType = false
     final def signature(implicit ctx: Context) = Signature.OverloadedSignature
-    def atSignature(sig: Signature)(implicit ctx: Context): SingleDenotation =
-      denot1.atSignature(sig) orElse denot2.atSignature(sig)
+    def atSignature(sig: Signature, site: Type)(implicit ctx: Context): SingleDenotation =
+      denot1.atSignature(sig, site) orElse denot2.atSignature(sig, site)
     def current(implicit ctx: Context): Denotation =
       derivedMultiDenotation(denot1.current, denot2.current)
     def altsWith(p: Symbol => Boolean): List[SingleDenotation] =
@@ -412,8 +414,10 @@ object Denotations {
     def accessibleFrom(pre: Type, superAccess: Boolean)(implicit ctx: Context): Denotation =
       if (!symbol.exists || symbol.isAccessibleFrom(pre, superAccess)) this else NoDenotation
 
-    def atSignature(sig: Signature)(implicit ctx: Context): SingleDenotation =
-      if (sig matches signature) this else NoDenotation
+    def atSignature(sig: Signature, site: Type)(implicit ctx: Context): SingleDenotation = {
+      val situated = if (site == NoPrefix) this else asSeenFrom(site)
+      if (sig matches situated.signature) this else NoDenotation
+    }
 
     // ------ Forming types -------------------------------------------
 
@@ -467,16 +471,18 @@ object Denotations {
      *  2) the union of all validity periods is a contiguous
      *     interval.
      */
-    private var nextInRun: SingleDenotation = this
+    protected var nextInRun: SingleDenotation = this
 
     /** The version of this SingleDenotation that was valid in the first phase
      *  of this run.
      */
-    def initial: SingleDenotation = {
-      var current = nextInRun
-      while (current.validFor.code > this.myValidFor.code) current = current.nextInRun
-      current
-    }
+    def initial: SingleDenotation =
+      if (validFor == Nowhere) this
+      else {
+        var current = nextInRun
+        while (current.validFor.code > this.myValidFor.code) current = current.nextInRun
+        current
+      }
 
     def history: List[SingleDenotation] = {
       val b = new ListBuffer[SingleDenotation]
@@ -489,6 +495,9 @@ object Denotations {
       b.toList
     }
 
+    /** Invalidate all caches and fields that depend on base classes and their contents */
+    def invalidateInheritedInfo(): Unit = ()
+
     /** Move validity period of this denotation to a new run. Throw a StaleSymbol error
      *  if denotation is no longer valid.
      */
@@ -498,9 +507,10 @@ object Denotations {
         var d: SingleDenotation = denot
         do {
           d.validFor = Period(ctx.period.runId, d.validFor.firstPhaseId, d.validFor.lastPhaseId)
+          d.invalidateInheritedInfo()
           d = d.nextInRun
         } while (d ne denot)
-        syncWithParents
+        this
       case _ =>
         if (coveredInterval.containsPhaseId(ctx.phaseId)) staleSymbolError
         else NoDenotation
@@ -607,17 +617,18 @@ object Denotations {
         val current = symbol.current
         // println(s"installing $this after $phase/${phase.id}, valid = ${current.validFor}")
         // printPeriods(current)
-        this.nextInRun = current.nextInRun
         this.validFor = Period(ctx.runId, targetId, current.validFor.lastPhaseId)
         if (current.validFor.firstPhaseId == targetId) {
           // replace current with this denotation
           var prev = current
           while (prev.nextInRun ne current) prev = prev.nextInRun
           prev.nextInRun = this
+          this.nextInRun = current.nextInRun
           current.validFor = Nowhere
         } else {
           // insert this denotation after current
           current.validFor = Period(ctx.runId, current.validFor.firstPhaseId, targetId - 1)
+          this.nextInRun = current.nextInRun
           current.nextInRun = this
         }
       // printPeriods(this)

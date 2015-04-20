@@ -106,7 +106,8 @@ object UnPickler {
       case TempPolyType(tps, cinfo) => (tps, cinfo)
       case cinfo => (Nil, cinfo)
     }
-    val parentRefs = ctx.normalizeToClassRefs(parents, cls, decls)
+    var parentRefs = ctx.normalizeToClassRefs(parents, cls, decls)
+    if (parentRefs.isEmpty) parentRefs = defn.ObjectClass.typeRef :: Nil
     for (tparam <- tparams) {
       val tsym = decls.lookup(tparam.name)
       if (tsym.exists) tsym.setFlag(TypeParam)
@@ -117,6 +118,24 @@ object UnPickler {
         denot.owner.thisType select denot.sourceModule
       else selfInfo
     if (!(denot.flagsUNSAFE is JavaModule)) ensureConstructor(denot.symbol.asClass, decls)
+
+    val scalacCompanion = denot.classSymbol.scalacLinkedClass
+
+    def registerCompanionPair(module: Symbol, claz: Symbol) = {
+      val companionClassMethod = ctx.synthesizeCompanionMethod(nme.COMPANION_CLASS_METHOD, claz, module)
+      if (companionClassMethod.exists)
+        companionClassMethod.entered
+      val companionModuleMethod = ctx.synthesizeCompanionMethod(nme.COMPANION_MODULE_METHOD, module, claz)
+      if (companionModuleMethod.exists)
+        companionModuleMethod.entered
+    }
+
+    if (denot.flagsUNSAFE is Module) {
+      registerCompanionPair(denot.classSymbol, scalacCompanion)
+    } else {
+      registerCompanionPair(scalacCompanion, denot.classSymbol)
+    }
+
     denot.info = ClassInfo(denot.owner.thisType, denot.classSymbol, parentRefs, decls, ost)
   }
 }
@@ -338,9 +357,9 @@ class UnPickler(bytes: Array[Byte], classRoot: ClassDenotation, moduleClassRoot:
         val denot1 = denot.disambiguate(d => p(d.symbol))
         val sym = denot1.symbol
         if (denot.exists && !denot1.exists) { // !!!DEBUG
-          val alts = denot.alternatives map (d => d+":"+d.info+"/"+d.signature)
+          val alts = denot.alternatives map (d => d + ":" + d.info + "/" + d.signature)
           System.err.println(s"!!! disambiguation failure: $alts")
-          val members = denot.alternatives.head.symbol.owner.info.decls.toList map (d => d+":"+d.info+"/"+d.signature)
+          val members = denot.alternatives.head.symbol.owner.info.decls.toList map (d => d + ":" + d.info + "/" + d.signature)
           System.err.println(s"!!! all members: $members")
         }
         if (tag == EXTref) sym else sym.moduleClass
@@ -349,7 +368,10 @@ class UnPickler(bytes: Array[Byte], classRoot: ClassDenotation, moduleClassRoot:
       def fromName(name: Name): Symbol = name.toTermName match {
         case nme.ROOT => loadingMirror.RootClass
         case nme.ROOTPKG => loadingMirror.RootPackage
-        case _ => adjust(owner.info.decl(name))
+        case _ =>
+          def declIn(owner: Symbol) = adjust(owner.info.decl(name))
+          val sym = declIn(owner)
+          if (sym.exists || owner.ne(defn.ObjectClass)) sym else declIn(defn.AnyClass)
       }
 
       def nestedObjectSymbol: Symbol = {
@@ -482,7 +504,11 @@ class UnPickler(bytes: Array[Byte], classRoot: ClassDenotation, moduleClassRoot:
         if (isModuleRoot) {
           moduleRoot setFlag flags
           moduleRoot.symbol
-        } else ctx.newSymbol(owner, name.asTermName, flags, localMemberUnpickler, coord = start)
+        } else ctx.newSymbol(owner, name.asTermName, flags,
+          new LocalUnpickler() withModuleClass(implicit ctx =>
+            owner.info.decls.lookup(name.moduleClassName)
+              .suchThat(_ is Module).symbol)
+          , coord = start)
       case _ =>
         errorBadSignature("bad symbol tag: " + tag)
     })
@@ -506,7 +532,7 @@ class UnPickler(bytes: Array[Byte], classRoot: ClassDenotation, moduleClassRoot:
             inforef = readNat()
             pw
           }
-        // println("reading type for "+denot) // !!! DEBUG
+        // println("reading type for " + denot) // !!! DEBUG
         val tp = at(inforef, readType)
         denot match {
           case denot: ClassDenotation =>
@@ -661,7 +687,7 @@ class UnPickler(bytes: Array[Byte], classRoot: ClassDenotation, moduleClassRoot:
         if (decls.isEmpty) parent
         else {
           def addRefinement(tp: Type, sym: Symbol) = {
-            def subst(info: Type, rt: RefinedType) = 
+            def subst(info: Type, rt: RefinedType) =
               if (clazz.isClass) info.substThis(clazz.asClass, SkolemType(rt))
               else info // turns out some symbols read into `clazz` are not classes, not sure why this is the case.
             RefinedType(tp, sym.name, subst(sym.info, _))

@@ -78,6 +78,13 @@ class Erasure extends Phase with DenotTransformer { thisTransformer =>
       case res: tpd.This =>
         assert(!ExplicitOuter.referencesOuter(ctx.owner.enclosingClass, res),
           i"Reference to $res from ${ctx.owner.showLocated}")
+      case ret: tpd.Return =>
+        // checked only after erasure, as checking before erasure is complicated
+        // due presence of type params in returned types
+        val from = if (ret.from.isEmpty) ctx.owner.enclosingMethod else ret.from.symbol
+        val rType = from.info.finalResultType
+        assert(ret.expr.tpe <:< rType,
+          i"Returned value:${ret.expr}  does not conform to result type(${ret.expr.tpe.widen} of method $from")
       case _ =>
     }
   }
@@ -251,7 +258,7 @@ object Erasure extends TypeTestsCasts{
     override def typedLiteral(tree: untpd.Literal)(implicit ctc: Context): Literal =
       if (tree.typeOpt.isRef(defn.UnitClass)) tree.withType(tree.typeOpt)
       else super.typedLiteral(tree)
-      
+
     /** Type check select nodes, applying the following rewritings exhaustively
      *  on selections `e.m`, where `OT` is the type of the owner of `m` and `ET`
      *  is the erased type of the selection's original qualifier expression.
@@ -278,7 +285,7 @@ object Erasure extends TypeTestsCasts{
 
       def select(qual: Tree, sym: Symbol): Tree = {
         val name = tree.typeOpt match {
-          case tp: NamedType if tp.name.isInheritedName => sym.name.inheritedName
+          case tp: NamedType if tp.name.isShadowedName => sym.name.shadowedName
           case _ => sym.name
         }
         untpd.cpy.Select(tree)(qual, sym.name)
@@ -388,24 +395,24 @@ object Erasure extends TypeTestsCasts{
     }
 
     // The following four methods take as the proto-type the erasure of the pre-existing type,
-    // if the original proto-type is not a value type. 
+    // if the original proto-type is not a value type.
     // This makes all branches be adapted to the correct type.
     override def typedSeqLiteral(tree: untpd.SeqLiteral, pt: Type)(implicit ctx: Context) =
       super.typedSeqLiteral(tree, erasure(tree.typeOpt))
-        // proto type of typed seq literal is original type; 
+        // proto type of typed seq literal is original type;
 
     override def typedIf(tree: untpd.If, pt: Type)(implicit ctx: Context) =
       super.typedIf(tree, adaptProto(tree, pt))
-   
+
     override def typedMatch(tree: untpd.Match, pt: Type)(implicit ctx: Context) =
       super.typedMatch(tree, adaptProto(tree, pt))
-    
-    override def typedTry(tree: untpd.Try, pt: Type)(implicit ctx: Context) = 
+
+    override def typedTry(tree: untpd.Try, pt: Type)(implicit ctx: Context) =
       super.typedTry(tree, adaptProto(tree, pt))
 
     private def adaptProto(tree: untpd.Tree, pt: Type)(implicit ctx: Context) = {
       if (pt.isValueType) pt else {
-        if(tree.typeOpt.derivesFrom(ctx.definitions.UnitClass))
+        if (tree.typeOpt.derivesFrom(ctx.definitions.UnitClass))
           tree.typeOpt
         else erasure(tree.typeOpt)
       }
@@ -419,7 +426,7 @@ object Erasure extends TypeTestsCasts{
       val restpe = sym.info.resultType
       val ddef1 = untpd.cpy.DefDef(ddef)(
         tparams = Nil,
-        vparamss = ddef.vparamss.flatten :: Nil,
+        vparamss = (outer.paramDefs(sym) ::: ddef.vparamss.flatten) :: Nil,
         tpt = untpd.TypedSplice(TypeTree(restpe).withPos(ddef.tpt.pos)),
         rhs = ddef.rhs match {
           case id @ Ident(nme.WILDCARD) => untpd.TypedSplice(id.withType(restpe))
@@ -484,12 +491,12 @@ object Erasure extends TypeTestsCasts{
                   sym => makeBridgeDef(member, sym)(ctx)
                 }
                 emittedBridges ++= bridgeImplementations
-                traverse(newTail, oldTail)
+                traverse(newTail, oldTail, emittedBridges)
               case notADefDef :: oldTail =>
-                traverse(after, oldTail)
+                traverse(after, oldTail, emittedBridges)
             }
           case notADefDef :: newTail =>
-            traverse(newTail, before)
+            traverse(newTail, before, emittedBridges)
         }
       }
 
@@ -497,19 +504,27 @@ object Erasure extends TypeTestsCasts{
     }
 
     def makeBridgeDef(newDef: tpd.DefDef, parentSym: Symbol)(implicit ctx: Context): tpd.DefDef = {
+      val newDefSym = newDef.symbol
+      val currentClass = newDefSym.owner.asClass
+
       def error(reason: String) = {
-        assert(false, s"failure creating bridge from ${newDef.symbol} to ${parentSym}, reason: $reason")
+        assert(false, s"failure creating bridge from ${newDefSym} to ${parentSym}, reason: $reason")
         ???
       }
-      val bridge = ctx.newSymbol(newDef.symbol.owner,
-        parentSym.name, parentSym.flags | Flags.Bridge, parentSym.info, coord = newDef.symbol.owner.coord).asTerm
+      val bridge = ctx.newSymbol(currentClass,
+        parentSym.name, parentSym.flags | Flags.Bridge, parentSym.info, coord = newDefSym.owner.coord).asTerm
       bridge.enteredAfter(ctx.phase.prev.asInstanceOf[DenotTransformer]) // this should be safe, as we're executing in context of next phase
-      ctx.debuglog(s"generating bridge from ${newDef.symbol} to $bridge")
+      ctx.debuglog(s"generating bridge from ${newDefSym} to $bridge")
 
-      val sel: Tree = This(newDef.symbol.owner.asClass).select(newDef.symbol.termRef)
+      val sel: Tree = This(currentClass).select(newDefSym.termRef)
 
-      val resultType = bridge.info.widen.resultType
+      val resultType = parentSym.info.widen.resultType
+
+      val bridgeCtx = ctx.withOwner(bridge)
+
       tpd.DefDef(bridge, { paramss: List[List[tpd.Tree]] =>
+          implicit val ctx: Context = bridgeCtx
+
           val rhs = paramss.foldLeft(sel)((fun, vparams) =>
             fun.tpe.widen match {
               case MethodType(names, types) => Apply(fun, (vparams, types).zipped.map(adapt(_, _, untpd.EmptyTree)))

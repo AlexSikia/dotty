@@ -117,9 +117,6 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
   def Try(block: Tree, cases: List[CaseDef], finalizer: Tree)(implicit ctx: Context): Try =
     ta.assignType(untpd.Try(block, cases, finalizer), block, cases)
 
-  def Throw(expr: Tree)(implicit ctx: Context): Throw =
-    ta.assignType(untpd.Throw(expr))
-
   def SeqLiteral(elems: List[Tree])(implicit ctx: Context): SeqLiteral =
     ta.assignType(untpd.SeqLiteral(elems), elems)
 
@@ -164,7 +161,7 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
   def UnApply(fun: Tree, implicits: List[Tree], patterns: List[Tree], proto: Type)(implicit ctx: Context): UnApply =
     ta.assignType(untpd.UnApply(fun, implicits, patterns), proto)
 
-  def ValDef(sym: TermSymbol, rhs: Tree = EmptyTree)(implicit ctx: Context): ValDef =
+  def ValDef(sym: TermSymbol, rhs: LazyTree = EmptyTree)(implicit ctx: Context): ValDef =
     ta.assignType(untpd.ValDef(sym.name, TypeTree(sym.info), rhs), sym)
 
   def SyntheticValDef(name: TermName, rhs: Tree)(implicit ctx: Context): ValDef =
@@ -186,8 +183,10 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
 
     def valueParamss(tp: Type): (List[List[TermSymbol]], Type) = tp match {
       case tp @ MethodType(paramNames, paramTypes) =>
-        def valueParam(name: TermName, info: Type): TermSymbol =
-          ctx.newSymbol(sym, name, TermParam, info)
+        def valueParam(name: TermName, info: Type): TermSymbol = {
+          val maybeImplicit = if (tp.isInstanceOf[ImplicitMethodType]) Implicit else EmptyFlags
+          ctx.newSymbol(sym, name, TermParam | maybeImplicit, info)
+        }
         val params = (paramNames, paramTypes).zipped.map(valueParam)
         val (paramss, rtp) = valueParamss(tp.instantiate(params map (_.termRef)))
         (params :: paramss, rtp)
@@ -237,7 +236,7 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
       for (tparam <- cls.typeParams if !(bodyTypeParams contains tparam))
       yield TypeDef(tparam)
     val findLocalDummy = new FindLocalDummyAccumulator(cls)
-    val localDummy = ((NoSymbol: Symbol) /: body)(findLocalDummy)
+    val localDummy = ((NoSymbol: Symbol) /: body)(findLocalDummy.apply)
       .orElse(ctx.newLocalDummy(cls))
     val impl = untpd.Template(constr, parents, selfType, newTypeParams ++ body)
       .withType(localDummy.nonMemberTermRef)
@@ -253,6 +252,9 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
   def Annotated(annot: Tree, arg: Tree)(implicit ctx: Context): Annotated =
     ta.assignType(untpd.Annotated(annot, arg), annot, arg)
 
+  def Throw(expr: Tree)(implicit ctx: Context): Tree =
+    ref(defn.throwMethod).appliedTo(expr)
+
   // ------ Making references ------------------------------------------------------
 
   def prefixIsElidable(tp: NamedType)(implicit ctx: Context) = {
@@ -261,7 +263,10 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
         true
       case pre: ThisType =>
         pre.cls.isStaticOwner ||
-          tp.symbol.is(ParamOrAccessor) && ctx.owner.enclosingClass.derivesFrom(pre.cls)
+          tp.symbol.is(ParamOrAccessor) && ctx.owner.enclosingClass == pre.cls
+          // was ctx.owner.enclosingClass.derivesFrom(pre.cls) which was not tight enough
+          // and was spuriously triggered in case inner class would inherit from outer one
+          // eg anonymous TypeMap inside TypeMap.andThen
       case pre: TermRef =>
         pre.symbol.is(Module) && pre.symbol.isStatic
       case _ =>
@@ -379,7 +384,7 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
     else Literal(Constant(null)).select(defn.Any_asInstanceOf).appliedToType(tpe)
   }
   private class FindLocalDummyAccumulator(cls: ClassSymbol)(implicit ctx: Context) extends TreeAccumulator[Symbol] {
-    def apply(sym: Symbol, tree: Tree) =
+    def apply(sym: Symbol, tree: Tree)(implicit ctx: Context) =
       if (sym.exists) sym
       else if (tree.isDef) {
         val owner = tree.symbol.owner
@@ -404,7 +409,8 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
     override def Select(tree: Tree)(qualifier: Tree, name: Name)(implicit ctx: Context): Select = {
       val tree1 = untpd.cpy.Select(tree)(qualifier, name)
       tree match {
-        case tree: Select if (qualifier.tpe eq tree.qualifier.tpe) => tree1.withTypeUnchecked(tree.tpe)
+        case tree: Select if (qualifier.tpe eq tree.qualifier.tpe) =>
+          tree1.withTypeUnchecked(tree.tpe)
         case _ => tree.tpe match {
           case tpe: NamedType => tree1.withType(tpe.derivedSelect(qualifier.tpe))
           case _ => tree1.withTypeUnchecked(tree.tpe)
@@ -493,9 +499,6 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
       }
     }
 
-    override def Throw(tree: Tree)(expr: Tree)(implicit ctx: Context): Throw =
-      ta.assignType(untpd.cpy.Throw(tree)(expr))
-
     override def SeqLiteral(tree: Tree)(elems: List[Tree])(implicit ctx: Context): SeqLiteral = {
       val tree1 = untpd.cpy.SeqLiteral(tree)(elems)
       tree match {
@@ -538,13 +541,13 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
       case _ => false
     }
 
-    def shallowFold[T](z: T)(op: (T, tpd.Tree) => T) =
+    def shallowFold[T](z: T)(op: (T, tpd.Tree) => T)(implicit ctx: Context) =
       new ShallowFolder(op).apply(z, tree)
 
-    def deepFold[T](z: T)(op: (T, tpd.Tree) => T) =
+    def deepFold[T](z: T)(op: (T, tpd.Tree) => T)(implicit ctx: Context) =
       new DeepFolder(op).apply(z, tree)
 
-    def find[T](pred: (tpd.Tree) => Boolean): Option[tpd.Tree] =
+    def find[T](pred: (tpd.Tree) => Boolean)(implicit ctx: Context): Option[tpd.Tree] =
       shallowFold[Option[tpd.Tree]](None)((accum, tree) => if (pred(tree)) Some(tree) else accum)
 
     def subst(from: List[Symbol], to: List[Symbol])(implicit ctx: Context): ThisTree =
@@ -571,7 +574,7 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
     def changeOwnerAfter(from: Symbol, to: Symbol, trans: DenotTransformer)(implicit ctx: Context): ThisTree = {
       assert(ctx.phase == trans.next)
       val traverser = new TreeTraverser {
-        def traverse(tree: Tree) = tree match {
+        def traverse(tree: Tree)(implicit ctx: Context) = tree match {
           case tree: DefTree =>
             val sym = tree.symbol
             if (sym.denot(ctx.withPhase(trans)).owner == from)
@@ -585,63 +588,97 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
       tree
     }
 
+    /** A select node with the given selector name and a computed type */
     def select(name: Name)(implicit ctx: Context): Select =
       Select(tree, name)
 
+    /** A select node with the given type */
     def select(tp: NamedType)(implicit ctx: Context): Select =
       untpd.Select(tree, tp.name).withType(tp)
 
+    /** A select node that selects the given symbol. Note: Need to make sure this
+     *  is in fact the symbol you would get when you select with the symbol's name,
+     *  otherwise a data race may occur which would be flagged by -Yno-double-bindings.
+     */
     def select(sym: Symbol)(implicit ctx: Context): Select =
       untpd.Select(tree, sym.name).withType(
         TermRef.withSigAndDenot(tree.tpe, sym.name.asTermName, sym.signature, sym.denot.asSeenFrom(tree.tpe)))
 
-    def selectWithSig(name: Name, sig: Signature)(implicit ctx: Context) =
+    /** A select node with the given selector name and signature and a computed type */
+    def selectWithSig(name: Name, sig: Signature)(implicit ctx: Context): Tree =
       untpd.SelectWithSig(tree, name, sig)
         .withType(TermRef.withSig(tree.tpe, name.asTermName, sig))
 
+    /** A select node with selector name and signature taken from `sym`.
+     *  Note: Use this method instead of select(sym) if the referenced symbol
+     *  might be overridden in the type of the qualifier prefix. See note
+     *  on select(sym: Symbol).
+     */
+    def selectWithSig(sym: Symbol)(implicit ctx: Context): Tree =
+      selectWithSig(sym.name, sym.signature)
+
+    /** A unary apply node with given argument: `tree(arg)` */
     def appliedTo(arg: Tree)(implicit ctx: Context): Tree =
       appliedToArgs(arg :: Nil)
 
+    /** An apply node with given arguments: `tree(arg, args0, ..., argsN)` */
     def appliedTo(arg: Tree, args: Tree*)(implicit ctx: Context): Tree =
       appliedToArgs(arg :: args.toList)
 
+    /** An apply node with given argument list `tree(args(0), ..., args(args.length - 1))` */
     def appliedToArgs(args: List[Tree])(implicit ctx: Context): Apply =
       Apply(tree, args)
 
+    /** The current tree applied to given argument lists:
+     *  `tree (argss(0)) ... (argss(argss.length -1))`
+     */
     def appliedToArgss(argss: List[List[Tree]])(implicit ctx: Context): Tree =
       ((tree: Tree) /: argss)(Apply(_, _))
 
+    /** The current tree applied to (): `tree()` */
     def appliedToNone(implicit ctx: Context): Apply = appliedToArgs(Nil)
 
+    /** The current tree applied to given type argument: `tree[targ]` */
     def appliedToType(targ: Type)(implicit ctx: Context): Tree =
       appliedToTypes(targ :: Nil)
 
+    /** The current tree applied to given type arguments: `tree[targ0, ..., targN]` */
     def appliedToTypes(targs: List[Type])(implicit ctx: Context): Tree =
       appliedToTypeTrees(targs map (TypeTree(_)))
 
+    /** The current tree applied to given type argument list: `tree[targs(0), ..., targs(targs.length - 1)]` */
     def appliedToTypeTrees(targs: List[Tree])(implicit ctx: Context): Tree =
       if (targs.isEmpty) tree else TypeApply(tree, targs)
 
+    /** Apply to `()` unless tree's widened type is parameterless */
     def ensureApplied(implicit ctx: Context): Tree =
       if (tree.tpe.widen.isParameterless) tree else tree.appliedToNone
 
+    /** `tree.isInstanceOf[tp]` */
     def isInstance(tp: Type)(implicit ctx: Context): Tree =
       tree.select(defn.Any_isInstanceOf).appliedToType(tp)
 
+    /** tree.asInstanceOf[`tp`] */
     def asInstance(tp: Type)(implicit ctx: Context): Tree = {
       assert(tp.isValueType, i"bad cast: $tree.asInstanceOf[$tp]")
       tree.select(defn.Any_asInstanceOf).appliedToType(tp)
     }
 
+    /** `tree.asInstanceOf[tp]` unless tree's type already conforms to `tp` */
     def ensureConforms(tp: Type)(implicit ctx: Context): Tree =
       if (tree.tpe <:< tp) tree else asInstance(tp)
 
+    /** `this && that`, for boolean trees `this`, `that` */
     def and(that: Tree)(implicit ctx: Context): Tree =
       tree.select(defn.Boolean_&&).appliedTo(that)
 
+    /** `this || that`, for boolean trees `this`, `that` */
     def or(that: Tree)(implicit ctx: Context): Tree =
       tree.select(defn.Boolean_||).appliedTo(that)
 
+    /** The translation of `tree = rhs`.
+     *  This is either the tree as an assignment, to a setter call.
+     */
     def becomes(rhs: Tree)(implicit ctx: Context): Tree =
       if (tree.symbol is Method) {
         val setr = tree match {
@@ -657,21 +694,24 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
 
     // --- Higher order traversal methods -------------------------------
 
-    def foreachSubTree(f: Tree => Unit): Unit = { //TODO should go in tpd.
+    /** Apply `f` to each subtree of this tree */
+    def foreachSubTree(f: Tree => Unit)(implicit ctx: Context): Unit = {
       val traverser = new TreeTraverser {
-        def traverse(tree: Tree) = foldOver(f(tree), tree)
+        def traverse(tree: Tree)(implicit ctx: Context) = foldOver(f(tree), tree)
       }
       traverser.traverse(tree)
     }
 
-    def existsSubTree(p: Tree => Boolean): Boolean = {
+    /** Is there a subtree of this tree that satisfies predicate `p`? */
+    def existsSubTree(p: Tree => Boolean)(implicit ctx: Context): Boolean = {
       val acc = new TreeAccumulator[Boolean] {
-        def apply(x: Boolean, t: Tree) = x || p(t) || foldOver(x, t)
+        def apply(x: Boolean, t: Tree)(implicit ctx: Context) = x || p(t) || foldOver(x, t)
       }
       acc(false, tree)
     }
 
-    def filterSubTrees(f: Tree => Boolean): List[Tree] = {
+    /** All subtrees of this tree that satisfy predicate `p`. */
+    def filterSubTrees(f: Tree => Boolean)(implicit ctx: Context): List[Tree] = {
       val buf = new mutable.ListBuffer[Tree]
       foreachSubTree { tree => if (f(tree)) buf += tree }
       buf.toList
@@ -704,9 +744,15 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
     val alternatives = ctx.typer.resolveOverloaded(alts, proto, Nil)
     assert(alternatives.size == 1) // this is parsed from bytecode tree. there's nothing user can do about it
 
+    val prefixTpe =
+      if (method eq nme.CONSTRUCTOR)
+        receiver.tpe.normalizedPrefix // <init> methods are part of the enclosing scope
+      else
+        receiver.tpe
+
     val selected = alternatives.head
     val fun = receiver
-      .select(TermRef.withSig(receiver.tpe.normalizedPrefix, selected.termSymbol.asTerm))
+      .select(TermRef.withSig(prefixTpe, selected.termSymbol.asTerm))
       .appliedToTypes(targs)
 
     def adaptLastArg(lastParam: Tree, expectedType: Type) = {
@@ -730,7 +776,7 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
       } else args
     }
 
-    val callArgs: List[Tree] = if(args.isEmpty) Nil else {
+    val callArgs: List[Tree] = if (args.isEmpty) Nil else {
       val expectedType = selected.widen.paramTypess.head.last
       val lastParam = args.last
       adaptLastArg(lastParam, expectedType)
@@ -770,9 +816,9 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
   /** A traverser that passes the enlcosing class or method as an argumenr
    *  to the traverse method.
    */
-  abstract class EnclosingMethodTraverser(implicit ctx: Context) extends TreeAccumulator[Symbol] {
-    def traverse(enclMeth: Symbol, tree: Tree): Unit
-    def apply(enclMeth: Symbol, tree: Tree) = {
+  abstract class EnclosingMethodTraverser extends TreeAccumulator[Symbol] {
+    def traverse(enclMeth: Symbol, tree: Tree)(implicit ctx: Context): Unit
+    def apply(enclMeth: Symbol, tree: Tree)(implicit ctx: Context) = {
       tree match {
         case _: DefTree if tree.symbol.exists =>
           traverse(tree.symbol.enclosingMethod, tree)
