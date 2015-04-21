@@ -15,7 +15,7 @@ import dotty.tools.dotc.transform.TreeTransforms.{TransformerInfo, MiniPhaseTran
 import scala.collection.mutable
 
 class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
-  
+
   override def phaseName = "specialize"
 
   final val maxTparamsToSpecialize = 2
@@ -75,7 +75,7 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
               .filter { tpe =>
               bounds.contains(tpe)
             }
-            (for(tpe <- specTypes) yield {
+            (for (tpe <- specTypes) yield {
               generateSpecializations(remainingTParams.tail, remainingBounds.tail)(tpe :: instantiations, specialisedTypeToSuffix(ctx)(tpe) :: names, poly)
             }).flatten
           }
@@ -84,7 +84,7 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
           }
         }
 
-        def generateSpecializedSymbols(instantiations : List[Type], names: List[String], poly: PolyType)(implicit ctx: Context): List[Symbol] = {
+        def generateSpecializedSymbols(instantiations: List[Type], names: List[String], poly: PolyType)(implicit ctx: Context): List[Symbol] = {
           val newSym = ctx.newSymbol(sym.owner, (sym.name + names.mkString).toTermName, sym.flags | Flags.Synthetic, poly.instantiate(instantiations.toList))
           val prev = newSymbolMap.getOrElse(sym, (Nil, Nil))
           val newSyms = newSym :: prev._1
@@ -94,22 +94,23 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
         }
 
         def shouldSpecialize(decl: Symbol)(implicit ctx: Context): Boolean =
-          specializationRequests.keys.toList.contains(sym) ||
+          specializationRequests.contains(sym) ||
             (ctx.settings.Yspecialize.value != "" && decl.name.contains(ctx.settings.Yspecialize.value)) ||
             ctx.settings.Yspecialize.value == "all"
 
         sym.info match {
           case t: ClassInfo =>
-            val newDecls = t.decls.flatMap(decl =>
-              if (shouldSpecialize(decl)) {
+            val newDecls = t.decls.flatMap(decl => {
+              if (decl.info == ctx.definitions.ScalaPredefModule) Nil//decl.name.contains("Predef")) Nil
+              else if (shouldSpecialize(decl)) {
                 decl.info.widen match {
                   case poly: PolyType =>
-                    generateSpecializations(poly.paramNames, poly.paramBounds)(List.empty, List.empty, poly)
+                    if (poly.paramNames.length <= maxTparamsToSpecialize) generateSpecializations(poly.paramNames, poly.paramBounds)(List.empty, List.empty, poly) else Nil
                   case nil =>
                     Nil
                 }
               } else Nil
-            )
+            })
             if (newDecls.isEmpty) t
             else {
               val decls = t.decls.cloneScope
@@ -194,10 +195,14 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
       case _ => tree
     }
   }
-
-  def transformTypeOfTree(tree: Tree): Tree = {
+  override def transformTypeApply(tree: TypeApply)(implicit ctx: Context, info: TransformerInfo): Tree = {
+    val scopedMethods = ctx.scope.lookup(tree.symbol.name)
     tree
   }
+/*
+  def transformTypeOfTree(tree: Tree)(implicit ctx: Context): Tree = tree
+
   override def transformIdent(tree: Ident)(implicit ctx: Context, info: TransformerInfo): Tree = transformTypeOfTree(tree)
   override def transformSelect(tree: Select)(implicit ctx: Context, info: TransformerInfo): Tree = transformTypeOfTree(tree)
+*/
 }

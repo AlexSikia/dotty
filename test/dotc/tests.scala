@@ -46,7 +46,7 @@ class tests extends CompilerTest {
   val toolsDir = dottyDir + "tools/"
   val dotcDir  = toolsDir + "dotc/"
   val coreDir  = dotcDir + "core/"
-
+/*
   @Test def pickle_pickleOK = compileDir(testsDir, "pickling", testPickling)
   @Test def pickle_pickling = compileDir(coreDir, "pickling", testPickling)
   @Test def pickle_ast = compileDir(dotcDir, "ast", testPickling)
@@ -201,6 +201,7 @@ class tests extends CompilerTest {
 
   val javaDir = "./tests/pos/java-interop/"
   @Test def java_all = compileFiles(javaDir, twice)
-
+*/
+  @Test def pos_specialization = compileFile(posDir, "specialization")
   //@Test def dotc_compilercommand = compileFile(dotcDir + "config/", "CompilerCommand")
 }
