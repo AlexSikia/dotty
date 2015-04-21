@@ -1,7 +1,7 @@
 package dotty.tools.dotc.transform
 
-import dotty.tools.dotc.ast.TreeTypeMap
-import dotty.tools.dotc.ast.Trees.SeqLiteral
+import dotty.tools.dotc.ast.{tpd, TreeTypeMap}
+import dotty.tools.dotc.ast.Trees.{TypeApply, SeqLiteral}
 import dotty.tools.dotc.ast.tpd._
 import dotty.tools.dotc.core.Annotations.Annotation
 import dotty.tools.dotc.core.Contexts.Context
@@ -64,18 +64,19 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
   }*/
 
   override def transformInfo(tp: Type, sym: Symbol)(implicit ctx: Context): Type = {
-
+ if((sym ne ctx.definitions.ScalaPredefModule.moduleClass) && !(sym is Flags.Package) && !(sym.isAnonymousClass))
     tp match {
       case t: ClassInfo =>
         def generateSpecializations(remainingTParams: List[Name], remainingBounds: List[TypeBounds])
                                    (instantiations: List[Type], names: List[String], poly: PolyType)(implicit ctx: Context): List[Symbol] = {
           if (remainingTParams.nonEmpty) {
             val bounds = remainingBounds.head
-            val specTypes = specializeForAll(sym).flatten
-              .filter { tpe =>
-              bounds.contains(tpe)
-            }
-            (for (tpe <- specTypes) yield {
+            (for (tpe <- {
+              primitiveTypes
+                .filter { tpe =>
+                bounds.contains(tpe)
+              }
+            }) yield {
               generateSpecializations(remainingTParams.tail, remainingBounds.tail)(tpe :: instantiations, specialisedTypeToSuffix(ctx)(tpe) :: names, poly)
             }).flatten
           }
@@ -101,7 +102,7 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
         sym.info match {
           case t: ClassInfo =>
             val newDecls = t.decls.flatMap(decl => {
-              if (decl.info == ctx.definitions.ScalaPredefModule) Nil//decl.name.contains("Predef")) Nil
+              if (decl eq ctx.definitions.ScalaPredefModule.moduleClass) Nil
               else if (shouldSpecialize(decl)) {
                 decl.info.widen match {
                   case poly: PolyType =>
@@ -123,6 +124,7 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
       case _ =>
         tp
     }
+    else tp
   }
 
   def registerSpecializationRequest(method: Symbols.Symbol)(arguments: List[Type])(implicit ctx: Context) = {
@@ -195,8 +197,13 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
       case _ => tree
     }
   }
-  override def transformTypeApply(tree: TypeApply)(implicit ctx: Context, info: TransformerInfo): Tree = {
-    val scopedMethods = ctx.scope.lookup(tree.symbol.name)
+
+  override def transformTypeApply(tree: tpd.TypeApply)(implicit ctx: Context, info: TransformerInfo): Tree = {
+    val TypeApply(fun,args) = tree
+    val name = fun.symbol.name
+
+
+
     tree
   }
 /*
