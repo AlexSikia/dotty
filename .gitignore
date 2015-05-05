@@ -35,3 +35,8 @@ out/
 
 # Partest
 tests/partest-generated/
+
+# Miniboxing tests
+/tests/method_minibox/
+/tests/more_minibox/
+/tests/minibox/

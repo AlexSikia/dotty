@@ -27,4 +27,3 @@ object arrays3 {
   def apply5(xs : Null*) : java.util.List[Null] = java.util.Arrays.asList(xs: _*)
   def apply6(xs : Nothing*) : java.util.List[Nothing] = java.util.Arrays.asList(xs: _*)
 }
-

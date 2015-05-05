@@ -480,7 +480,7 @@ object SymDenotations {
       (!isCompleted || info.firstParamTypes.nonEmpty) // to avoid being fooled by   var x_= : Unit = ...
 
     /** is this the constructor of a class? */
-    final def isClassConstructor = name == nme.CONSTRUCTOR
+    final def isClassConstructor = name startsWith nme.CONSTRUCTOR
 
     /** Is this the constructor of a trait? */
     final def isImplClassConstructor = name == nme.IMPLCLASS_CONSTRUCTOR
