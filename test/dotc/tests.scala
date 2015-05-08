@@ -51,6 +51,7 @@ class tests extends CompilerTest {
   val dotcDir  = toolsDir + "dotc/"
   val coreDir  = dotcDir + "core/"
 
+/*
 
   @Test def pickle_pickleOK = compileDir(testsDir, "pickling", testPickling)
   @Test def pickle_pickling = compileDir(coreDir, "pickling", testPickling)
@@ -216,5 +217,11 @@ class tests extends CompilerTest {
   @Test def mini_method = compileFiles(miniMethodDir)//, List("-Xprint:all"))
   @Test def mini_more = compileFiles(miniMoreDir)//, List("-Xprint:all"))
   //@Test def pos_all = compileFiles(posDir)//, List("-Xprint:all"))
+*/
+  @Test def pos_mutual_spec = compileFile(posDir, "mutual_specialization", List("-Xprint:all"))
+  //@Test def pos_mutual_spec = compileFile(posDir, "mutual_specialization")
+  //@Test def pos_spec = compileFile(posDir, "specialization")
+
+//  @Test def pos_si7638 = compileFile(posDir, "SI-7638", List("-Xprint:all"))
 
 }

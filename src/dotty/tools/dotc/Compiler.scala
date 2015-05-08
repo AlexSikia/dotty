@@ -43,7 +43,8 @@ class Compiler {
            new SyntheticMethods),
       List(new SuperAccessors),
       List(new Pickler), // Pickler needs to come last in a group since it should not pickle trees generated later
-      List(new RefChecks,
+      List(new PreSpecializer,
+           new RefChecks,
            new ElimRepeated,
            new NormalizeFlags,
            new ExtensionMethods,
