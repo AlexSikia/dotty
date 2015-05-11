@@ -1,0 +1,51 @@
+[[syntax trees at end of            minibox-commit]] // newSource1.scala
+package miniboxing.tests.compile.bug166 {
+  abstract trait A[@miniboxed T] extends Object {
+    def getStr(): String
+  };
+  abstract trait A$D[Tsp] extends Object with miniboxing.tests.compile.bug166.A[Tsp] {
+    def miniboxing|tests|compile|bug166|A$D|T$TypeTag(): Byte;
+    def getStr(): String = "aaa"
+  };
+  abstract trait A$J[Tsp] extends Object with miniboxing.tests.compile.bug166.A[Tsp] {
+    def miniboxing|tests|compile|bug166|A$J|T$TypeTag(): Byte;
+    def getStr(): String = "aaa"
+  };
+  abstract trait A$L[Tsp] extends Object with miniboxing.tests.compile.bug166.A[Tsp] {
+    def getStr(): String = "aaa"
+  };
+  abstract trait B[@miniboxed T] extends Object with miniboxing.tests.compile.bug166.A[T] {
+    override def getStr(): String;
+    override def toString(): String
+  };
+  abstract trait B$D[Tsp] extends Object with miniboxing.tests.compile.bug166.A$D[Tsp] with miniboxing.tests.compile.bug166.B[Tsp] {
+    def miniboxing|tests|compile|bug166|B$D|T$TypeTag(): Byte;
+    override def getStr(): String = B$D.this.super$getStr();
+    override def toString(): String = "instance of C"
+  };
+  abstract trait B$J[Tsp] extends Object with miniboxing.tests.compile.bug166.A$J[Tsp] with miniboxing.tests.compile.bug166.B[Tsp] {
+    def miniboxing|tests|compile|bug166|B$J|T$TypeTag(): Byte;
+    override def getStr(): String = B$J.this.super$getStr();
+    override def toString(): String = "instance of C"
+  };
+  abstract trait B$L[Tsp] extends Object with miniboxing.tests.compile.bug166.A$L[Tsp] with miniboxing.tests.compile.bug166.B[Tsp] {
+    override def getStr(): String = B$L.this.super$getStr();
+    override def toString(): String = "instance of C"
+  };
+  class C extends Object with miniboxing.tests.compile.bug166.B$J[Int] {
+    def miniboxing|tests|compile|bug166|A$J|T$TypeTag(): Byte = 5;
+    def miniboxing|tests|compile|bug166|B$J|T$TypeTag(): Byte = 5;
+    def <init>(): miniboxing.tests.compile.bug166.C = {
+      C.super.<init>();
+      ()
+    }
+  };
+  object Test extends Object {
+    def <init>(): miniboxing.tests.compile.bug166.Test.type = {
+      Test.super.<init>();
+      ()
+    };
+    def main(args: Array[String]): Unit = scala.this.Predef.println(new miniboxing.tests.compile.bug166.C())
+  }
+}
+instance of C

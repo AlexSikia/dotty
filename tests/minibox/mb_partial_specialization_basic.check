@@ -1,0 +1,49 @@
+Specializing class UhOh1...
+  // interface:
+  abstract trait UhOh1[X, Y] extends Object {
+    def foo$J(val X$TypeTag: Byte,x: X @storage[Long],y: Y): X @storage[Long]
+    def foo(x: X,y: Y): X
+  }
+  // specialized class:
+  class UhOh1$J[Xsp, Ysp] extends UhOh1[Xsp,Ysp] {
+    def <init>(val miniboxing|tests|compile|UhOh1$J|X$TypeTag: Byte): miniboxing.tests.compile.UhOh1$J[Xsp,Ysp] // is a specialized implementation of constructor UhOh1
+    def foo$J(val X$TypeTag: Byte,x: Xsp @storage[Long],y: Ysp): Xsp @storage[Long] // is a specialized implementation of method foo
+    def foo(x: Xsp,y: Ysp): Xsp                                            // is a forwarder to the specialized member
+    private[this] val miniboxing|tests|compile|UhOh1$J|X$TypeTag: Byte     // is a type tag
+  }
+  // specialized class:
+  class UhOh1$L[Xsp, Ysp] extends UhOh1[Xsp,Ysp] {
+    def <init>(): miniboxing.tests.compile.UhOh1$L[Xsp,Ysp]                // is a specialized implementation of constructor UhOh1
+    def foo$J(val X$TypeTag: Byte,x: Xsp @storage[Long],y: Ysp): Xsp @storage[Long] // is a forwarder to the specialized member
+    def foo(x: Xsp,y: Ysp): Xsp                                            // is a specialized implementation of method foo
+  }
+[Now checking: minibox-inject]
+[Now checking: minibox-bridge]
+[Not checkable: minibox-coerce]
+Miniboxing plugin warning: Optimizing `MbArray` is only possible if you allow the plugin to use both long and double encodings (remove `P:minibox:Yone-way` compiler option). `MbArray`-s will be generic and will box.
+Miniboxing plugin warning: Optimizing `MbTuple` is only possible if you allow the plugin to use both long and double encodings (remove `P:minibox:Yone-way` compiler option). `MbTuple`-s will be generic and will box.
+[[syntax trees at end of            minibox-commit]] // newSource1.scala
+package miniboxing.tests.compile {
+  abstract trait UhOh1[@miniboxed X, Y] extends Object {
+    def foo(x: X, y: Y): X;
+    def foo$J(X$TypeTag: Byte, x: Long, y: Y): Long
+  };
+  class UhOh1$J[Xsp, Ysp] extends Object with miniboxing.tests.compile.UhOh1[Xsp,Ysp] {
+    <paramaccessor> private[this] val miniboxing|tests|compile|UhOh1$J|X$TypeTag: Byte = _;
+    def <init>(miniboxing|tests|compile|UhOh1$J|X$TypeTag: Byte): miniboxing.tests.compile.UhOh1$J[Xsp,Ysp] = {
+      UhOh1$J.super.<init>();
+      ()
+    };
+    def foo(x: Xsp, y: Ysp): Xsp = MiniboxConversions.this.minibox2box[Xsp](UhOh1$J.this.foo$J(UhOh1$J.this.miniboxing|tests|compile|UhOh1$J|X$TypeTag, MiniboxConversions.this.box2minibox_tt[Xsp](x, UhOh1$J.this.miniboxing|tests|compile|UhOh1$J|X$TypeTag), y), UhOh1$J.this.miniboxing|tests|compile|UhOh1$J|X$TypeTag);
+    def foo$J(X$TypeTag: Byte, x: Long, y: Ysp): Long = UhOh1$J.this.foo$J(X$TypeTag, x, y)
+  };
+  class UhOh1$L[Xsp, Ysp] extends Object with miniboxing.tests.compile.UhOh1[Xsp,Ysp] {
+    def <init>(): miniboxing.tests.compile.UhOh1$L[Xsp,Ysp] = {
+      UhOh1$L.super.<init>();
+      ()
+    };
+    def foo(x: Xsp, y: Ysp): Xsp = UhOh1$L.this.foo(x, y);
+    def foo$J(X$TypeTag: Byte, x: Long, y: Ysp): Long = MiniboxConversions.this.box2minibox_tt[Xsp](UhOh1$L.this.foo(MiniboxConversions.this.minibox2box[Xsp](x, X$TypeTag), y), X$TypeTag)
+  }
+}
+[Now checking: minibox-commit]

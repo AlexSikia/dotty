@@ -1,0 +1,69 @@
+[Now checking: minibox-inject]
+[Now checking: minibox-bridge]
+[Not checkable: minibox-coerce]
+Miniboxing plugin warning: Optimizing `MbArray` is only possible if you allow the plugin to use both long and double encodings (remove `P:minibox:Yone-way` compiler option). `MbArray`-s will be generic and will box.
+Miniboxing plugin warning: Optimizing `MbTuple` is only possible if you allow the plugin to use both long and double encodings (remove `P:minibox:Yone-way` compiler option). `MbTuple`-s will be generic and will box.
+[[syntax trees at end of            minibox-commit]] // newSource1.scala
+package miniboxing.tests.compile {
+  abstract trait ArgumentRewire[@miniboxed T] extends Object {
+    def test(t: T): T;
+    def test$J(T$TypeTag: Byte, t: Long): Long
+  };
+  class ArgumentRewire$J[Tsp] extends Object with miniboxing.tests.compile.ArgumentRewire[Tsp] {
+    <paramaccessor> private[this] val miniboxing|tests|compile|ArgumentRewire$J|T$TypeTag: Byte = _;
+    def <init>(miniboxing|tests|compile|ArgumentRewire$J|T$TypeTag: Byte): miniboxing.tests.compile.ArgumentRewire$J[Tsp] = {
+      ArgumentRewire$J.super.<init>();
+      ()
+    };
+    def test(t: Tsp): Tsp = MiniboxConversions.this.minibox2box[Tsp](ArgumentRewire$J.this.test$J(ArgumentRewire$J.this.miniboxing|tests|compile|ArgumentRewire$J|T$TypeTag, MiniboxConversions.this.box2minibox_tt[Tsp](t, ArgumentRewire$J.this.miniboxing|tests|compile|ArgumentRewire$J|T$TypeTag)), ArgumentRewire$J.this.miniboxing|tests|compile|ArgumentRewire$J|T$TypeTag);
+    def test$J(T$TypeTag: Byte, t: Long): Long = {
+      scala.this.Predef.println(MiniboxConversions.this.minibox2box[Tsp](t, T$TypeTag));
+      MiniboxDispatch.this.mboxed_hashCode(t, T$TypeTag);
+      MiniboxConversions.this.box2minibox_tt[Tsp](scala.this.Predef.identity[Tsp](MiniboxConversions.this.minibox2box[Tsp](t, T$TypeTag)), T$TypeTag)
+    }
+  };
+  class ArgumentRewire$L[Tsp] extends Object with miniboxing.tests.compile.ArgumentRewire[Tsp] {
+    def <init>(): miniboxing.tests.compile.ArgumentRewire$L[Tsp] = {
+      ArgumentRewire$L.super.<init>();
+      ()
+    };
+    def test(t: Tsp): Tsp = {
+      scala.this.Predef.println(t);
+      t.hashCode();
+      scala.this.Predef.identity[Tsp](t)
+    };
+    def test$J(T$TypeTag: Byte, t: Long): Long = MiniboxConversions.this.box2minibox_tt[Tsp](ArgumentRewire$L.this.test(MiniboxConversions.this.minibox2box[Tsp](t, T$TypeTag)), T$TypeTag)
+  };
+  abstract trait LocalRewire[@miniboxed T] extends Object {
+    def test(t: T): T;
+    def test$J(T$TypeTag: Byte, t: Long): Long
+  };
+  class LocalRewire$J[Tsp] extends Object with miniboxing.tests.compile.LocalRewire[Tsp] {
+    <paramaccessor> private[this] val miniboxing|tests|compile|LocalRewire$J|T$TypeTag: Byte = _;
+    def <init>(miniboxing|tests|compile|LocalRewire$J|T$TypeTag: Byte): miniboxing.tests.compile.LocalRewire$J[Tsp] = {
+      LocalRewire$J.super.<init>();
+      ()
+    };
+    def test(t: Tsp): Tsp = MiniboxConversions.this.minibox2box[Tsp](LocalRewire$J.this.test$J(LocalRewire$J.this.miniboxing|tests|compile|LocalRewire$J|T$TypeTag, MiniboxConversions.this.box2minibox_tt[Tsp](t, LocalRewire$J.this.miniboxing|tests|compile|LocalRewire$J|T$TypeTag)), LocalRewire$J.this.miniboxing|tests|compile|LocalRewire$J|T$TypeTag);
+    def test$J(T$TypeTag: Byte, t: Long): Long = {
+      val x: Long = t;
+      scala.this.Predef.println(MiniboxConversions.this.minibox2box[Tsp](t, T$TypeTag));
+      MiniboxDispatch.this.mboxed_hashCode(t, T$TypeTag);
+      MiniboxConversions.this.box2minibox_tt[Tsp](scala.this.Predef.identity[Tsp](MiniboxConversions.this.minibox2box[Tsp](t, T$TypeTag)), T$TypeTag)
+    }
+  };
+  class LocalRewire$L[Tsp] extends Object with miniboxing.tests.compile.LocalRewire[Tsp] {
+    def <init>(): miniboxing.tests.compile.LocalRewire$L[Tsp] = {
+      LocalRewire$L.super.<init>();
+      ()
+    };
+    def test(t: Tsp): Tsp = {
+      val x: Tsp = t;
+      scala.this.Predef.println(t);
+      t.hashCode();
+      scala.this.Predef.identity[Tsp](t)
+    };
+    def test$J(T$TypeTag: Byte, t: Long): Long = MiniboxConversions.this.box2minibox_tt[Tsp](LocalRewire$L.this.test(MiniboxConversions.this.minibox2box[Tsp](t, T$TypeTag)), T$TypeTag)
+  }
+}
+[Now checking: minibox-commit]

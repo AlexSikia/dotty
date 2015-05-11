@@ -1,0 +1,20 @@
+Miniboxing plugin warning: Optimizing `MbArray` is only possible if you allow the plugin to use both long and double encodings (remove `P:minibox:Yone-way` compiler option). `MbArray`-s will be generic and will box.
+Miniboxing plugin warning: Optimizing `MbTuple` is only possible if you allow the plugin to use both long and double encodings (remove `P:minibox:Yone-way` compiler option). `MbTuple`-s will be generic and will box.
+[[syntax trees at end of            minibox-commit]] // newSource1.scala
+package miniboxing.tests.compile.bug95 {
+  object Test extends Object {
+    def <init>(): miniboxing.tests.compile.bug95.Test.type = {
+      Test.super.<init>();
+      ()
+    };
+    def foo[@miniboxed T](t: T): Unit = {
+      val t2: T = t;
+      ()
+    };
+    def foo$n$J[T](T$TypeTag: Byte, t: Long): Unit = {
+      val t2: Long = t;
+      ()
+    };
+    def main(args: Array[String]): Unit = Test.this.foo$n$J[Int](5, MiniboxConversions.this.int2minibox(3))
+  }
+}

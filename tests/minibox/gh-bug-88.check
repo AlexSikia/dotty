@@ -1,0 +1,54 @@
+[[syntax trees at end of            minibox-inject]] // newSource1.scala
+package miniboxing.tests.compile.bug88 {
+  abstract trait CCC[@miniboxed T] extends Object {
+    <stable> <accessor> <paramaccessor> def c(): T;
+    <stable> <accessor> def c$J(T$TypeTag: Byte): T @storage[Long];
+    abstract trait DDD[@miniboxed U] extends Object {
+      <stable> <accessor> <paramaccessor> def d(): U;
+      <stable> <accessor> def d$J(U$TypeTag: Byte): U @storage[Long];
+      def foo(): Unit
+    };
+    class DDD$J[Usp] extends Object with CCC.this.DDD[Usp] {
+      <paramaccessor> private[this] val miniboxing|tests|compile|bug88|CCC|DDD$J|U$TypeTag: Byte = _;
+      <paramaccessor> private[this] val d: Usp @storage[Long] = _;
+      <stable> <accessor> <paramaccessor> def d(): Usp = DDD$J.this.d$J(DDD$J.this.miniboxing|tests|compile|bug88|CCC|DDD$J|U$TypeTag);
+      <stable> <accessor> def d$J(U$TypeTag: Byte): Usp @storage[Long] = DDD$J.this.d;
+      def <init>(miniboxing|tests|compile|bug88|CCC|DDD$J|U$TypeTag: Byte, d: Usp @storage[Long]): CCC.this.DDD$J[Usp] = {
+        DDD$J.super.<init>();
+        ()
+      };
+      def foo(): Unit = scala.this.Predef.println(CCC.this.c().==(DDD$J.this.d$J(DDD$J.this.miniboxing|tests|compile|bug88|CCC|DDD$J|U$TypeTag)))
+    };
+    class DDD$L[Usp] extends Object with CCC.this.DDD[Usp] {
+      <paramaccessor> private[this] val d: Usp = _;
+      <stable> <accessor> <paramaccessor> def d(): Usp = DDD$L.this.d;
+      <stable> <accessor> def d$J(U$TypeTag: Byte): Usp @storage[Long] = DDD$L.this.d();
+      def <init>(d: Usp): CCC.this.DDD$L[Usp] = {
+        DDD$L.super.<init>();
+        ()
+      };
+      def foo(): Unit = scala.this.Predef.println(CCC.this.c().==(DDD$L.this.d()))
+    }
+  };
+  class CCC$J[Tsp] extends Object with miniboxing.tests.compile.bug88.CCC[Tsp] {
+    <paramaccessor> private[this] val miniboxing|tests|compile|bug88|CCC$J|T$TypeTag: Byte = _;
+    <paramaccessor> private[this] val c: Tsp @storage[Long] = _;
+    <stable> <accessor> <paramaccessor> def c(): Tsp = CCC$J.this.c$J(CCC$J.this.miniboxing|tests|compile|bug88|CCC$J|T$TypeTag);
+    <stable> <accessor> def c$J(T$TypeTag: Byte): Tsp @storage[Long] = CCC$J.this.c;
+    def <init>(miniboxing|tests|compile|bug88|CCC$J|T$TypeTag: Byte, c: Tsp @storage[Long]): miniboxing.tests.compile.bug88.CCC$J[Tsp] = {
+      CCC$J.super.<init>();
+      ()
+    }
+  };
+  class CCC$L[Tsp] extends Object with miniboxing.tests.compile.bug88.CCC[Tsp] {
+    <paramaccessor> private[this] val c: Tsp = _;
+    <stable> <accessor> <paramaccessor> def c(): Tsp = CCC$L.this.c;
+    <stable> <accessor> def c$J(T$TypeTag: Byte): Tsp @storage[Long] = CCC$L.this.c();
+    def <init>(c: Tsp): miniboxing.tests.compile.bug88.CCC$L[Tsp] = {
+      CCC$L.super.<init>();
+      ()
+    }
+  }
+}
+Miniboxing plugin warning: Optimizing `MbArray` is only possible if you allow the plugin to use both long and double encodings (remove `P:minibox:Yone-way` compiler option). `MbArray`-s will be generic and will box.
+Miniboxing plugin warning: Optimizing `MbTuple` is only possible if you allow the plugin to use both long and double encodings (remove `P:minibox:Yone-way` compiler option). `MbTuple`-s will be generic and will box.

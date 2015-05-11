@@ -1,0 +1,18 @@
+[[syntax trees at end of            minibox-commit]] // newSource1.scala
+package miniboxing.tests.compile.bug171.test6 {
+  object Test extends Object {
+    def <init>(): miniboxing.tests.compile.bug171.test6.Test.type = {
+      Test.super.<init>();
+      ()
+    };
+    def foo[@miniboxed T, @miniboxed U](): Unit = scala.this.Predef.println("other");
+    def foo$n$DD[T, U](T$TypeTag: Byte, U$TypeTag: Byte): Unit = scala.this.Predef.println("miniboxed");
+    def foo$n$DJ[T, U](T$TypeTag: Byte, U$TypeTag: Byte): Unit = scala.this.Predef.println("miniboxed");
+    def foo$n$DL[T, U](T$TypeTag: Byte): Unit = scala.this.Predef.println("other");
+    def foo$n$JD[T, U](T$TypeTag: Byte, U$TypeTag: Byte): Unit = scala.this.Predef.println("miniboxed");
+    def foo$n$JJ[T, U](T$TypeTag: Byte, U$TypeTag: Byte): Unit = scala.this.Predef.println("miniboxed");
+    def foo$n$JL[T, U](T$TypeTag: Byte): Unit = scala.this.Predef.println("other");
+    def foo$n$LD[T, U](U$TypeTag: Byte): Unit = scala.this.Predef.println("other");
+    def foo$n$LJ[T, U](U$TypeTag: Byte): Unit = scala.this.Predef.println("other")
+  }
+}

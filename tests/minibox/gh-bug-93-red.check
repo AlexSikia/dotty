@@ -1,0 +1,34 @@
+[[syntax trees at end of            minibox-inject]] // newSource1.scala
+package miniboxing.tests.compile.bug69.red1 {
+  object Test extends Object {
+    def <init>(): miniboxing.tests.compile.bug69.red1.Test.type = {
+      Test.super.<init>();
+      ()
+    };
+    def foo(): Nothing = {
+      abstract trait C[@miniboxed T] extends Object;
+      class C$J[Tsp] extends Object with C[Tsp] {
+        <paramaccessor> private[this] val miniboxing|tests|compile|bug69|red1|Test|C$J|T$TypeTag: Byte = _;
+        def <init>(miniboxing|tests|compile|bug69|red1|Test|C$J|T$TypeTag: Byte): C$J[Tsp] = {
+          C$J.super.<init>();
+          ()
+        }
+      };
+      class C$L[Tsp] extends Object with C[Tsp] {
+        def <init>(): C$L[Tsp] = {
+          C$L.super.<init>();
+          ()
+        }
+      };
+      class D extends Object {
+        def <init>(): D = {
+          D.super.<init>();
+          ()
+        }
+      };
+      scala.this.Predef.???()
+    }
+  }
+}
+Miniboxing plugin warning: Optimizing `MbArray` is only possible if you allow the plugin to use both long and double encodings (remove `P:minibox:Yone-way` compiler option). `MbArray`-s will be generic and will box.
+Miniboxing plugin warning: Optimizing `MbTuple` is only possible if you allow the plugin to use both long and double encodings (remove `P:minibox:Yone-way` compiler option). `MbTuple`-s will be generic and will box.

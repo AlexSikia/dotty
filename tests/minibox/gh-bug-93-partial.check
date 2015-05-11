@@ -1,0 +1,29 @@
+[[syntax trees at end of            minibox-inject]] // newSource1.scala
+package miniboxing.tests.compile.bug993.partial {
+  abstract trait C[@miniboxed T] extends Object {
+    def foo(): Int;
+    def bar(t: T): T;
+    def bar$J(T$TypeTag: Byte, t: T @storage[Long]): T @storage[Long]
+  };
+  class C$J[Tsp] extends Object with miniboxing.tests.compile.bug993.partial.C[Tsp] {
+    <paramaccessor> private[this] val miniboxing|tests|compile|bug993|partial|C$J|T$TypeTag: Byte = _;
+    def <init>(miniboxing|tests|compile|bug993|partial|C$J|T$TypeTag: Byte): miniboxing.tests.compile.bug993.partial.C$J[Tsp] = {
+      C$J.super.<init>();
+      ()
+    };
+    def foo(): Int = 3;
+    def bar(t: Tsp): Tsp = C$J.this.bar$J(C$J.this.miniboxing|tests|compile|bug993|partial|C$J|T$TypeTag, t);
+    def bar$J(T$TypeTag: Byte, t: Tsp @storage[Long]): Tsp @storage[Long] = t
+  };
+  class C$L[Tsp] extends Object with miniboxing.tests.compile.bug993.partial.C[Tsp] {
+    def <init>(): miniboxing.tests.compile.bug993.partial.C$L[Tsp] = {
+      C$L.super.<init>();
+      ()
+    };
+    def foo(): Int = 3;
+    def bar(t: Tsp): Tsp = t;
+    def bar$J(T$TypeTag: Byte, t: Tsp @storage[Long]): Tsp @storage[Long] = C$L.this.bar(t)
+  }
+}
+Miniboxing plugin warning: Optimizing `MbArray` is only possible if you allow the plugin to use both long and double encodings (remove `P:minibox:Yone-way` compiler option). `MbArray`-s will be generic and will box.
+Miniboxing plugin warning: Optimizing `MbTuple` is only possible if you allow the plugin to use both long and double encodings (remove `P:minibox:Yone-way` compiler option). `MbTuple`-s will be generic and will box.

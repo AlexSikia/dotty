@@ -1,0 +1,18 @@
+Miniboxing plugin warning: Optimizing `MbArray` is only possible if you allow the plugin to use both long and double encodings (remove `P:minibox:Yone-way` compiler option). `MbArray`-s will be generic and will box.
+Miniboxing plugin warning: Optimizing `MbTuple` is only possible if you allow the plugin to use both long and double encodings (remove `P:minibox:Yone-way` compiler option). `MbTuple`-s will be generic and will box.
+[[syntax trees at end of            minibox-commit]] // newSource1.scala
+package miniboxing.tests.compile.spire4.var1 {
+  abstract trait Dist[@miniboxed A] extends Object { self: miniboxing.tests.compile.spire4.var1.Dist[A] =>
+    def sample[CC[A] >: [A]Nothing <: [A]Iterable[A]](n: Int, a: A): CC[A];
+    def sample$J[CC[A] >: [A]Nothing <: [A]Iterable[A]](A$TypeTag: Byte, n: Int, a: Long): CC[A]
+  };
+  abstract trait Dist$J[Asp] extends Object with miniboxing.tests.compile.spire4.var1.Dist[Asp] {
+    def miniboxing|tests|compile|spire4|var1|Dist$J|A$TypeTag(): Byte;
+    def sample[CC[A] >: [A]Nothing <: [A]Iterable[A]](n: Int, a: Asp): CC[Asp] = Dist$J.this.sample$J[CC](Dist$J.this.miniboxing|tests|compile|spire4|var1|Dist$J|A$TypeTag(), n, MiniboxConversions.this.box2minibox_tt[Asp](a, Dist$J.this.miniboxing|tests|compile|spire4|var1|Dist$J|A$TypeTag()));
+    def sample$J[CC[A] >: [A]Nothing <: [A]Iterable[A]](A$TypeTag: Byte, n: Int, a: Long): CC[Asp] = scala.this.Predef.???()
+  };
+  abstract trait Dist$L[Asp] extends Object with miniboxing.tests.compile.spire4.var1.Dist[Asp] {
+    def sample[CC[A] >: [A]Nothing <: [A]Iterable[A]](n: Int, a: Asp): CC[Asp] = scala.this.Predef.???();
+    def sample$J[CC[A] >: [A]Nothing <: [A]Iterable[A]](A$TypeTag: Byte, n: Int, a: Long): CC[Asp] = Dist$L.this.sample[CC](n, MiniboxConversions.this.minibox2box[Asp](a, A$TypeTag))
+  }
+}

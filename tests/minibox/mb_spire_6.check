@@ -1,0 +1,32 @@
+Specializing class TailCallsCrasher...
+newSource1.scala:6: error: Following the miniboxing transformation, this method will no longer be in tailcall position (please see https://github.com/miniboxing/miniboxing-plugin/issues/181 for a workaround):
+  @tailrec final def zzz1(x: A): A = zzz1(x)
+                     ^
+newSource1.scala:7: error: Following the miniboxing transformation, this method will no longer be in tailcall position (please see https://github.com/miniboxing/miniboxing-plugin/issues/181 for a workaround):
+  @tailrec private[this] def zzz2(x: A): A = zzz2(x)
+                             ^
+  // interface:
+  abstract trait TailCallsCrasher[A] extends Object {
+    final def zzz1$J(val A$TypeTag: Byte,x: A @storage[Long]): A @storage[Long]
+    final def zzz1(x: A): A
+    private[this] def zzz2$J(val A$TypeTag: Byte,x: A @storage[Long]): A @storage[Long]
+    private[this] def zzz2(x: A): A
+  }
+  // specialized class:
+  class TailCallsCrasher$J[Asp] extends TailCallsCrasher[Asp] {
+    def <init>(val miniboxing|tests|compile|TailCallsCrasher$J|A$TypeTag: Byte): miniboxing.tests.compile.TailCallsCrasher$J[Asp] // is a specialized implementation of constructor TailCallsCrasher
+    final def zzz1$J(val A$TypeTag: Byte,x: Asp @storage[Long]): Asp @storage[Long] // is a specialized implementation of method zzz1
+    final def zzz1(x: Asp): Asp                                            // is a forwarder to the specialized member
+    private[this] def zzz2$J(val A$TypeTag: Byte,x: Asp @storage[Long]): Asp @storage[Long] // is a specialized implementation of method zzz2
+    private[this] def zzz2(x: Asp): Asp                                    // is a forwarder to the specialized member
+    private[this] val miniboxing|tests|compile|TailCallsCrasher$J|A$TypeTag: Byte // is a type tag
+  }
+  // specialized class:
+  class TailCallsCrasher$L[Asp] extends TailCallsCrasher[Asp] {
+    def <init>(): miniboxing.tests.compile.TailCallsCrasher$L[Asp]         // is a specialized implementation of constructor TailCallsCrasher
+    final def zzz1$J(val A$TypeTag: Byte,x: Asp @storage[Long]): Asp @storage[Long] // is a forwarder to the specialized member
+    final def zzz1(x: Asp): Asp                                            // is a specialized implementation of method zzz1
+    private[this] def zzz2$J(val A$TypeTag: Byte,x: Asp @storage[Long]): Asp @storage[Long] // is a forwarder to the specialized member
+    private[this] def zzz2(x: Asp): Asp                                    // is a specialized implementation of method zzz2
+  }
+[Now checking: minibox-inject]

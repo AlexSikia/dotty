@@ -1,0 +1,51 @@
+Specializing class C...
+  // interface:
+  abstract trait C[T] extends Object {
+    def u$J(val T$TypeTag: Byte): T @storage[Long]
+    def u(): T
+    def x$J(val T$TypeTag: Byte): T @storage[Long]
+    def x$J_=(val T$TypeTag: Byte,x$1: T @storage[Long]): Unit
+    def x(): T
+    def x_=(x$1: T): Unit
+    def y$J(val T$TypeTag: Byte,arg: T @storage[Long]): T @storage[Long]
+    def y(arg: T): T
+    def z$J(val T$TypeTag: Byte,arg1: T @storage[Long],arg2: List[T]): T @storage[Long]
+    def z(arg1: T,arg2: List[T]): T
+  }
+  // specialized class:
+  class C$J[Tsp] extends C[Tsp] {
+    def <init>(val C$J|T$TypeTag: Byte,x: Tsp @storage[Long]): C$J[Tsp]    // is a specialized implementation of constructor C
+    def u$J(val T$TypeTag: Byte): Tsp @storage[Long]                       // is a specialized implementation of method u
+    def u(): Tsp                                                           // is a forwarder to the specialized member
+    def x$J(val T$TypeTag: Byte): Tsp @storage[Long]                       // is a setter or getter for variable x
+    def x$J_=(val T$TypeTag: Byte,x$1: Tsp @storage[Long]): Unit           // is a setter or getter for variable x
+    def x(): Tsp                                                           // is a forwarder to the specialized member
+    def x_=(x$1: Tsp): Unit                                                // is a forwarder to the specialized member
+    def y$J(val T$TypeTag: Byte,arg: Tsp @storage[Long]): Tsp @storage[Long] // is a specialized implementation of method y
+    def y(arg: Tsp): Tsp                                                   // is a forwarder to the specialized member
+    def z$J(val T$TypeTag: Byte,arg1: Tsp @storage[Long],arg2: List[Tsp]): Tsp @storage[Long] // is a specialized implementation of method z
+    def z(arg1: Tsp,arg2: List[Tsp]): Tsp                                  // is a forwarder to the specialized member
+    private[this] val C$J|T$TypeTag: Byte                                  // is a type tag
+    private[this] var x: Tsp @storage[Long]                                // is a specialized implementation of variable x
+  }
+  // specialized class:
+  class C$L[Tsp] extends C[Tsp] {
+    def <init>(x: Tsp): C$L[Tsp]                                           // is a specialized implementation of constructor C
+    def u$J(val T$TypeTag: Byte): Tsp @storage[Long]                       // is a forwarder to the specialized member
+    def u(): Tsp                                                           // is a specialized implementation of method u
+    def x$J(val T$TypeTag: Byte): Tsp @storage[Long]                       // is a forwarder to the specialized member
+    def x$J_=(val T$TypeTag: Byte,x$1: Tsp @storage[Long]): Unit           // is a forwarder to the specialized member
+    def x(): Tsp                                                           // is a setter or getter for variable x
+    def x_=(x$1: Tsp): Unit                                                // is a setter or getter for variable x
+    def y$J(val T$TypeTag: Byte,arg: Tsp @storage[Long]): Tsp @storage[Long] // is a forwarder to the specialized member
+    def y(arg: Tsp): Tsp                                                   // is a specialized implementation of method y
+    def z$J(val T$TypeTag: Byte,arg1: Tsp @storage[Long],arg2: List[Tsp]): Tsp @storage[Long] // is a forwarder to the specialized member
+    def z(arg1: Tsp,arg2: List[Tsp]): Tsp                                  // is a specialized implementation of method z
+    private[this] var x: Tsp                                               // is a specialized implementation of variable x
+  }
+[Now checking: minibox-inject]
+[Now checking: minibox-bridge]
+[Not checkable: minibox-coerce]
+Miniboxing plugin warning: Optimizing `MbArray` is only possible if you allow the plugin to use both long and double encodings (remove `P:minibox:Yone-way` compiler option). `MbArray`-s will be generic and will box.
+Miniboxing plugin warning: Optimizing `MbTuple` is only possible if you allow the plugin to use both long and double encodings (remove `P:minibox:Yone-way` compiler option). `MbTuple`-s will be generic and will box.
+[Now checking: minibox-commit]

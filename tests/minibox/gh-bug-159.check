@@ -1,0 +1,51 @@
+[[syntax trees at end of            minibox-commit]] // newSource1.scala
+package miniboxing.tests.compile.bug159 {
+  object Test extends Object {
+    def <init>(): miniboxing.tests.compile.bug159.Test.type = {
+      Test.super.<init>();
+      ()
+    };
+    abstract trait A[@miniboxed T] extends Object;
+    class A$D[Tsp] extends Object with miniboxing.tests.compile.bug159.Test.A[Tsp] {
+      <paramaccessor> private[this] val miniboxing|tests|compile|bug159|Test|A$D|T$TypeTag: Byte = _;
+      def <init>(miniboxing|tests|compile|bug159|Test|A$D|T$TypeTag: Byte): miniboxing.tests.compile.bug159.Test.A$D[Tsp] = {
+        A$D.super.<init>();
+        ()
+      }
+    };
+    class A$J[Tsp] extends Object with miniboxing.tests.compile.bug159.Test.A[Tsp] {
+      <paramaccessor> private[this] val miniboxing|tests|compile|bug159|Test|A$J|T$TypeTag: Byte = _;
+      def <init>(miniboxing|tests|compile|bug159|Test|A$J|T$TypeTag: Byte): miniboxing.tests.compile.bug159.Test.A$J[Tsp] = {
+        A$J.super.<init>();
+        ()
+      }
+    };
+    class A$L[Tsp] extends Object with miniboxing.tests.compile.bug159.Test.A[Tsp] {
+      def <init>(): miniboxing.tests.compile.bug159.Test.A$L[Tsp] = {
+        A$L.super.<init>();
+        ()
+      }
+    };
+    abstract trait B[@miniboxed T] extends Object;
+    class B$D[Tsp] extends miniboxing.tests.compile.bug159.Test.A$D[Tsp] with miniboxing.tests.compile.bug159.Test.B[Tsp] {
+      <paramaccessor> private[this] val miniboxing|tests|compile|bug159|Test|B$D|T$TypeTag: Byte = _;
+      def <init>(miniboxing|tests|compile|bug159|Test|B$D|T$TypeTag: Byte): miniboxing.tests.compile.bug159.Test.B$D[Tsp] = {
+        B$D.super.<init>(miniboxing|tests|compile|bug159|Test|B$D|T$TypeTag);
+        ()
+      }
+    };
+    class B$J[Tsp] extends miniboxing.tests.compile.bug159.Test.A$J[Tsp] with miniboxing.tests.compile.bug159.Test.B[Tsp] {
+      <paramaccessor> private[this] val miniboxing|tests|compile|bug159|Test|B$J|T$TypeTag: Byte = _;
+      def <init>(miniboxing|tests|compile|bug159|Test|B$J|T$TypeTag: Byte): miniboxing.tests.compile.bug159.Test.B$J[Tsp] = {
+        B$J.super.<init>(miniboxing|tests|compile|bug159|Test|B$J|T$TypeTag);
+        ()
+      }
+    };
+    class B$L[Tsp] extends miniboxing.tests.compile.bug159.Test.A$L[Tsp] with miniboxing.tests.compile.bug159.Test.B[Tsp] {
+      def <init>(): miniboxing.tests.compile.bug159.Test.B$L[Tsp] = {
+        B$L.super.<init>();
+        ()
+      }
+    }
+  }
+}

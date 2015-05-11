@@ -1,0 +1,74 @@
+[Now checking: minibox-inject]
+[Now checking: minibox-bridge]
+[Not checkable: minibox-coerce]
+Miniboxing plugin warning: Optimizing `MbArray` is only possible if you allow the plugin to use both long and double encodings (remove `P:minibox:Yone-way` compiler option). `MbArray`-s will be generic and will box.
+Miniboxing plugin warning: Optimizing `MbTuple` is only possible if you allow the plugin to use both long and double encodings (remove `P:minibox:Yone-way` compiler option). `MbTuple`-s will be generic and will box.
+[[syntax trees at end of            minibox-commit]] // newSource1.scala
+package miniboxing.tests.compile {
+  abstract trait TR[@miniboxed T] extends Object {
+    def foo(t: T): T;
+    def foo$J(T$TypeTag: Byte, t: Long): Long;
+    def bar(t: miniboxing.tests.compile.TR[T]): T;
+    def bar$J(T$TypeTag: Byte, t: miniboxing.tests.compile.TR[T]): Long
+  };
+  class TR$J[Tsp] extends Object with miniboxing.tests.compile.TR[Tsp] {
+    <paramaccessor> private[this] val miniboxing|tests|compile|TR$J|T$TypeTag: Byte = _;
+    def <init>(miniboxing|tests|compile|TR$J|T$TypeTag: Byte): miniboxing.tests.compile.TR$J[Tsp] = {
+      TR$J.super.<init>();
+      ()
+    };
+    def foo(t: Tsp): Tsp = MiniboxConversions.this.minibox2box[Tsp](TR$J.this.foo$J(TR$J.this.miniboxing|tests|compile|TR$J|T$TypeTag, MiniboxConversions.this.box2minibox_tt[Tsp](t, TR$J.this.miniboxing|tests|compile|TR$J|T$TypeTag)), TR$J.this.miniboxing|tests|compile|TR$J|T$TypeTag);
+    def foo$J(T$TypeTag: Byte, t: Long): Long = TR$J.this.foo$J(T$TypeTag, t);
+    def bar(t: miniboxing.tests.compile.TR[Tsp]): Tsp = MiniboxConversions.this.minibox2box[Tsp](TR$J.this.bar$J(TR$J.this.miniboxing|tests|compile|TR$J|T$TypeTag, t), TR$J.this.miniboxing|tests|compile|TR$J|T$TypeTag);
+    def bar$J(T$TypeTag: Byte, t: miniboxing.tests.compile.TR[Tsp]): Long = t.foo$J(T$TypeTag, MiniboxConversions.this.box2minibox_tt[Tsp](scala.this.Predef.???(), T$TypeTag))
+  };
+  class TR$L[Tsp] extends Object with miniboxing.tests.compile.TR[Tsp] {
+    def <init>(): miniboxing.tests.compile.TR$L[Tsp] = {
+      TR$L.super.<init>();
+      ()
+    };
+    def foo(t: Tsp): Tsp = TR$L.this.foo(t);
+    def foo$J(T$TypeTag: Byte, t: Long): Long = MiniboxConversions.this.box2minibox_tt[Tsp](TR$L.this.foo(MiniboxConversions.this.minibox2box[Tsp](t, T$TypeTag)), T$TypeTag);
+    def bar(t: miniboxing.tests.compile.TR[Tsp]): Tsp = t.foo(scala.this.Predef.???());
+    def bar$J(T$TypeTag: Byte, t: miniboxing.tests.compile.TR[Tsp]): Long = MiniboxConversions.this.box2minibox_tt[Tsp](TR$L.this.bar(t), T$TypeTag)
+  };
+  abstract trait RT[@miniboxed U] extends Object {
+    def test(u: U): U;
+    def test$J(U$TypeTag: Byte, u: Long): Long
+  };
+  class RT$J[Usp] extends Object with miniboxing.tests.compile.RT[Usp] {
+    <paramaccessor> private[this] val miniboxing|tests|compile|RT$J|U$TypeTag: Byte = _;
+    def <init>(miniboxing|tests|compile|RT$J|U$TypeTag: Byte): miniboxing.tests.compile.RT$J[Usp] = {
+      RT$J.super.<init>();
+      ()
+    };
+    def test(u: Usp): Usp = MiniboxConversions.this.minibox2box[Usp](RT$J.this.test$J(RT$J.this.miniboxing|tests|compile|RT$J|U$TypeTag, MiniboxConversions.this.box2minibox_tt[Usp](u, RT$J.this.miniboxing|tests|compile|RT$J|U$TypeTag)), RT$J.this.miniboxing|tests|compile|RT$J|U$TypeTag);
+    def test$J(U$TypeTag: Byte, u: Long): Long = {
+      val tr: miniboxing.tests.compile.TR[Usp] = new miniboxing.tests.compile.TR$J[Usp](U$TypeTag);
+      tr.foo$J(U$TypeTag, u)
+    }
+  };
+  class RT$L[Usp] extends Object with miniboxing.tests.compile.RT[Usp] {
+    def <init>(): miniboxing.tests.compile.RT$L[Usp] = {
+      RT$L.super.<init>();
+      ()
+    };
+    def test(u: Usp): Usp = {
+      val tr: miniboxing.tests.compile.TR[Usp] = new miniboxing.tests.compile.TR$L[Usp]();
+      tr.foo(u)
+    };
+    def test$J(U$TypeTag: Byte, u: Long): Long = MiniboxConversions.this.box2minibox_tt[Usp](RT$L.this.test(MiniboxConversions.this.minibox2box[Usp](u, U$TypeTag)), U$TypeTag)
+  };
+  object Test extends Object {
+    def <init>(): miniboxing.tests.compile.Test.type = {
+      Test.super.<init>();
+      ()
+    };
+    def test[T](): T = {
+      new miniboxing.tests.compile.TR$J[Int](5).foo$J(5, MiniboxConversions.this.int2minibox(3));
+      new miniboxing.tests.compile.TR$L[String]().foo("xxx");
+      new miniboxing.tests.compile.TR$L[T]().foo(scala.this.Predef.???())
+    }
+  }
+}
+[Now checking: minibox-commit]

@@ -1,0 +1,31 @@
+Miniboxing plugin warning: Optimizing `MbArray` is only possible if you allow the plugin to use both long and double encodings (remove `P:minibox:Yone-way` compiler option). `MbArray`-s will be generic and will box.
+Miniboxing plugin warning: Optimizing `MbTuple` is only possible if you allow the plugin to use both long and double encodings (remove `P:minibox:Yone-way` compiler option). `MbTuple`-s will be generic and will box.
+[[syntax trees at end of            minibox-commit]] // newSource1.scala
+package miniboxing.tests.compile.bug53 {
+  object Test2 extends Object {
+    def <init>(): miniboxing.tests.compile.bug53.Test2.type = {
+      Test2.super.<init>();
+      ()
+    };
+    class X extends Object {
+      def <init>(): miniboxing.tests.compile.bug53.Test2.X = {
+        X.super.<init>();
+        ()
+      };
+      abstract trait BUG53[@miniboxed T] extends Object;
+      class BUG53$J[Tsp] extends Object with X.this.BUG53[Tsp] {
+        <paramaccessor> private[this] val miniboxing|tests|compile|bug53|Test2|X|BUG53$J|T$TypeTag: Byte = _;
+        def <init>(miniboxing|tests|compile|bug53|Test2|X|BUG53$J|T$TypeTag: Byte): X.this.BUG53$J[Tsp] = {
+          BUG53$J.super.<init>();
+          ()
+        }
+      };
+      class BUG53$L[Tsp] extends Object with X.this.BUG53[Tsp] {
+        def <init>(): X.this.BUG53$L[Tsp] = {
+          BUG53$L.super.<init>();
+          ()
+        }
+      }
+    }
+  }
+}

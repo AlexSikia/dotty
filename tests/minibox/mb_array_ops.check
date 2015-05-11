@@ -1,0 +1,78 @@
+[Now checking: minibox-inject]
+[Now checking: minibox-bridge]
+[Not checkable: minibox-coerce]
+Miniboxing plugin warning: Optimizing `MbArray` is only possible if you allow the plugin to use both long and double encodings (remove `P:minibox:Yone-way` compiler option). `MbArray`-s will be generic and will box.
+Miniboxing plugin warning: Optimizing `MbTuple` is only possible if you allow the plugin to use both long and double encodings (remove `P:minibox:Yone-way` compiler option). `MbTuple`-s will be generic and will box.
+[[syntax trees at end of            minibox-commit]] // newSource1.scala
+package miniboxing.tests.compile {
+  abstract trait VerifyArrayOps[@miniboxed T] extends Object {
+    <stable> <accessor> def x(): Array[T];
+    <stable> <accessor> def x$J(T$TypeTag: Byte): Array[T];
+    def reverse(): Unit;
+    def reverse$J(T$TypeTag: Byte): Unit
+  };
+  class VerifyArrayOps$J[Tsp] extends Object with miniboxing.tests.compile.VerifyArrayOps[Tsp] {
+    <paramaccessor> private[this] val miniboxing|tests|compile|VerifyArrayOps$J|T$TypeTag: Byte = _;
+    implicit <synthetic> <paramaccessor> private[this] val evidence$1: scala.reflect.Manifest[Tsp] = _;
+    def <init>(miniboxing|tests|compile|VerifyArrayOps$J|T$TypeTag: Byte, evidence$1: scala.reflect.Manifest[Tsp]): miniboxing.tests.compile.VerifyArrayOps$J[Tsp] = {
+      VerifyArrayOps$J.super.<init>();
+      ()
+    };
+    private[this] val x: Array[Tsp] = MiniboxArray.this.mbarray_new[Tsp](10, VerifyArrayOps$J.this.miniboxing|tests|compile|VerifyArrayOps$J|T$TypeTag).asInstanceOf[Array[Tsp]]();
+    <stable> <accessor> def x(): Array[Tsp] = VerifyArrayOps$J.this.x$J(VerifyArrayOps$J.this.miniboxing|tests|compile|VerifyArrayOps$J|T$TypeTag);
+    <stable> <accessor> def x$J(T$TypeTag: Byte): Array[Tsp] = VerifyArrayOps$J.this.x;
+    def reverse(): Unit = VerifyArrayOps$J.this.reverse$J(VerifyArrayOps$J.this.miniboxing|tests|compile|VerifyArrayOps$J|T$TypeTag);
+    def reverse$J(T$TypeTag: Byte): Unit = {
+      var i: Int = 0;
+      var j: Int = MiniboxArray.this.mbarray_length(VerifyArrayOps$J.this.x$J(T$TypeTag), T$TypeTag).-(1);
+      while$1(){
+        if (i.<(j))
+          {
+            {
+              val t1: Long = MiniboxArray.this.mbarray_apply_minibox(VerifyArrayOps$J.this.x$J(T$TypeTag), i, T$TypeTag);
+              val t2: Long = MiniboxArray.this.mbarray_apply_minibox(VerifyArrayOps$J.this.x$J(T$TypeTag), j, T$TypeTag);
+              MiniboxArray.this.mbarray_update_minibox(VerifyArrayOps$J.this.x$J(T$TypeTag), i, t2, T$TypeTag);
+              MiniboxArray.this.mbarray_update_minibox(VerifyArrayOps$J.this.x$J(T$TypeTag), j, t1, T$TypeTag);
+              i = i.+(1);
+              j = j.-(1)
+            };
+            while$1()
+          }
+        else
+          ()
+      }
+    }
+  };
+  class VerifyArrayOps$L[Tsp] extends Object with miniboxing.tests.compile.VerifyArrayOps[Tsp] {
+    implicit <synthetic> <paramaccessor> private[this] val evidence$1: scala.reflect.Manifest[Tsp] = _;
+    def <init>(evidence$1: scala.reflect.Manifest[Tsp]): miniboxing.tests.compile.VerifyArrayOps$L[Tsp] = {
+      VerifyArrayOps$L.super.<init>();
+      ()
+    };
+    private[this] val x: Array[Tsp] = VerifyArrayOps$L.this.evidence$1.newArray(10);
+    <stable> <accessor> def x(): Array[Tsp] = VerifyArrayOps$L.this.x;
+    <stable> <accessor> def x$J(T$TypeTag: Byte): Array[Tsp] = VerifyArrayOps$L.this.x();
+    def reverse(): Unit = {
+      var i: Int = 0;
+      var j: Int = VerifyArrayOps$L.this.x().length().-(1);
+      while$1(){
+        if (i.<(j))
+          {
+            {
+              val t1: Tsp = VerifyArrayOps$L.this.x().apply(i);
+              val t2: Tsp = VerifyArrayOps$L.this.x().apply(j);
+              VerifyArrayOps$L.this.x().update(i, t2);
+              VerifyArrayOps$L.this.x().update(j, t1);
+              i = i.+(1);
+              j = j.-(1)
+            };
+            while$1()
+          }
+        else
+          ()
+      }
+    };
+    def reverse$J(T$TypeTag: Byte): Unit = VerifyArrayOps$L.this.reverse()
+  }
+}
+[Now checking: minibox-commit]

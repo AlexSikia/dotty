@@ -1,0 +1,64 @@
+[Now checking: minibox-inject]
+[Now checking: minibox-bridge]
+[Not checkable: minibox-coerce]
+Miniboxing plugin warning: Optimizing `MbArray` is only possible if you allow the plugin to use both long and double encodings (remove `P:minibox:Yone-way` compiler option). `MbArray`-s will be generic and will box.
+Miniboxing plugin warning: Optimizing `MbTuple` is only possible if you allow the plugin to use both long and double encodings (remove `P:minibox:Yone-way` compiler option). `MbTuple`-s will be generic and will box.
+[[syntax trees at end of            minibox-commit]] // newSource1.scala
+package miniboxing.tests.correctness.erasure.torture2 {
+  abstract trait A[@miniboxed T] extends Object {
+    <stable> <accessor> <paramaccessor> def a(): Array[T];
+    def foo(c: Boolean): Any
+  };
+  class A$J[Tsp] extends Object with miniboxing.tests.correctness.erasure.torture2.A[Tsp] {
+    <paramaccessor> private[this] val miniboxing|tests|correctness|erasure|torture2|A$J|T$TypeTag: Byte = _;
+    <paramaccessor> private[this] val a: Array[Tsp] = _;
+    <stable> <accessor> <paramaccessor> def a(): Array[Tsp] = A$J.this.a;
+    def <init>(miniboxing|tests|correctness|erasure|torture2|A$J|T$TypeTag: Byte, a: Array[Tsp]): miniboxing.tests.correctness.erasure.torture2.A$J[Tsp] = {
+      A$J.super.<init>();
+      ()
+    };
+    def foo(c: Boolean): Any = {
+      val x: Long = if (c)
+        MiniboxArray.this.mbarray_apply_minibox(A$J.this.a(), 0, A$J.this.miniboxing|tests|correctness|erasure|torture2|A$J|T$TypeTag)
+      else
+        MiniboxArray.this.mbarray_apply_minibox(A$J.this.a(), 1, A$J.this.miniboxing|tests|correctness|erasure|torture2|A$J|T$TypeTag);
+      val y: List[Tsp] = {
+        <synthetic> val x$2: Long = MiniboxArray.this.mbarray_apply_minibox(A$J.this.a(), 0, A$J.this.miniboxing|tests|correctness|erasure|torture2|A$J|T$TypeTag);
+        {
+  <synthetic> val x$1: Long = MiniboxArray.this.mbarray_apply_minibox(A$J.this.a(), 1, A$J.this.miniboxing|tests|correctness|erasure|torture2|A$J|T$TypeTag);
+  immutable.this.Nil.::[Tsp](MiniboxConversions.this.minibox2box[Tsp](x$1, A$J.this.miniboxing|tests|correctness|erasure|torture2|A$J|T$TypeTag))
+}.::[Tsp](MiniboxConversions.this.minibox2box[Tsp](x$2, A$J.this.miniboxing|tests|correctness|erasure|torture2|A$J|T$TypeTag))
+      };
+      if (c)
+        MiniboxConversions.this.minibox2box[Tsp](x, A$J.this.miniboxing|tests|correctness|erasure|torture2|A$J|T$TypeTag)
+      else
+        y
+    }
+  };
+  class A$L[Tsp] extends Object with miniboxing.tests.correctness.erasure.torture2.A[Tsp] {
+    <paramaccessor> private[this] val a: Array[Tsp] = _;
+    <stable> <accessor> <paramaccessor> def a(): Array[Tsp] = A$L.this.a;
+    def <init>(a: Array[Tsp]): miniboxing.tests.correctness.erasure.torture2.A$L[Tsp] = {
+      A$L.super.<init>();
+      ()
+    };
+    def foo(c: Boolean): Any = {
+      val x: Tsp = if (c)
+        A$L.this.a().apply(0)
+      else
+        A$L.this.a().apply(1);
+      val y: List[Tsp] = {
+        <synthetic> val x$2: Tsp = A$L.this.a().apply(0);
+        {
+  <synthetic> val x$1: Tsp = A$L.this.a().apply(1);
+  immutable.this.Nil.::[Tsp](x$1)
+}.::[Tsp](x$2)
+      };
+      if (c)
+        x
+      else
+        y
+    }
+  }
+}
+[Now checking: minibox-commit]

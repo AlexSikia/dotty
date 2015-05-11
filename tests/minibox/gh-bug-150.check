@@ -1,0 +1,66 @@
+[Now checking: minibox-inject]
+[check: minibox-inject] symbol out of scope
+[check: minibox-inject] symbol out of scope
+[check: minibox-inject] symbol out of scope
+[check: minibox-inject] symbol out of scope
+[[syntax trees at end of            minibox-commit]] // newSource1.scala
+package miniboxing.tests.compile.bug150 {
+  object Test extends Object with App {
+    def <init>(): miniboxing.tests.compile.bug150.Test.type = {
+      Test.super.<init>();
+      ()
+    };
+    abstract trait C[T] extends Object {
+      def compare(t1: T, t2: T): Boolean
+    };
+    def foo[@miniboxed T](t1: T, t2: T): miniboxing.tests.compile.bug150.Test.C[T]{def foo(): T} = {
+      val c: miniboxing.tests.compile.bug150.Test.C[T]{def foo(): T} = {
+        final class $anon extends Object with miniboxing.tests.compile.bug150.Test.C[T] {
+          def <init>(): anonymous class $anon = {
+            $anon.super.<init>();
+            ()
+          };
+          def compare(t1: T, t2: T): Boolean = t1.==(t2);
+          protected def foo(): T = scala.this.Predef.???()
+        };
+        new anonymous class $anon()
+      };
+      scala.this.Predef.println(c.compare(t1, t2));
+      c
+    };
+    def foo$n$D[T](T$TypeTag: Byte, t1: Double, t2: Double): miniboxing.tests.compile.bug150.Test.C[T]{def foo(): Double} = {
+      val c: miniboxing.tests.compile.bug150.Test.C[T]{def foo(): Double} = {
+        final class $anon extends Object with miniboxing.tests.compile.bug150.Test.C[T] {
+          def <init>(): anonymous class $anon = {
+            $anon.super.<init>();
+            ()
+          };
+          def compare(t1: T, t2: T): Boolean = t1.==(t2);
+          protected def foo(): Double = MiniboxConversionsDouble.this.box2minibox_tt[T](scala.this.Predef.???(), T$TypeTag)
+        };
+        new anonymous class $anon()
+      };
+      scala.this.Predef.println(c.compare(MiniboxConversionsDouble.this.minibox2box[T](t1, T$TypeTag), MiniboxConversionsDouble.this.minibox2box[T](t2, T$TypeTag)));
+      c
+    };
+    def foo$n$J[T](T$TypeTag: Byte, t1: Long, t2: Long): miniboxing.tests.compile.bug150.Test.C[T]{def foo(): Long} = {
+      val c: miniboxing.tests.compile.bug150.Test.C[T]{def foo(): Long} = {
+        final class $anon extends Object with miniboxing.tests.compile.bug150.Test.C[T] {
+          def <init>(): anonymous class $anon = {
+            $anon.super.<init>();
+            ()
+          };
+          def compare(t1: T, t2: T): Boolean = t1.==(t2);
+          protected def foo(): Long = MiniboxConversionsLong.this.box2minibox_tt[T](scala.this.Predef.???(), T$TypeTag)
+        };
+        new anonymous class $anon()
+      };
+      scala.this.Predef.println(c.compare(MiniboxConversionsLong.this.minibox2box[T](t1, T$TypeTag), MiniboxConversionsLong.this.minibox2box[T](t2, T$TypeTag)));
+      c
+    };
+    Test.this.foo$n$J[Int](5, MiniboxConversions.this.int2minibox(300), MiniboxConversions.this.int2minibox(400));
+    Test.this.foo$n$D[Double](8, MiniboxConversionsDouble.this.double2minibox(3.0), MiniboxConversionsDouble.this.double2minibox(3.0))
+  }
+}
+false
+true

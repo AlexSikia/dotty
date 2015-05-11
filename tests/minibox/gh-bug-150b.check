@@ -1,0 +1,77 @@
+[Now checking: minibox-inject]
+[Now checking: minibox-bridge]
+[Not checkable: minibox-coerce]
+[[syntax trees at end of            minibox-commit]] // newSource1.scala
+package miniboxing.tests.compile.spec.interop.functions3 {
+  object Fuctions3 extends Object {
+    def <init>(): miniboxing.tests.compile.spec.interop.functions3.Fuctions3.type = {
+      Fuctions3.super.<init>();
+      ()
+    };
+    abstract trait F[@miniboxed A] extends Object {
+      def foo[B](b: B): Unit
+    };
+    class F$D[Asp] extends Object with miniboxing.tests.compile.spec.interop.functions3.Fuctions3.F[Asp] {
+      <paramaccessor> private[this] val miniboxing|tests|compile|spec|interop|functions3|Fuctions3|F$D|A$TypeTag: Byte = _;
+      def <init>(miniboxing|tests|compile|spec|interop|functions3|Fuctions3|F$D|A$TypeTag: Byte): miniboxing.tests.compile.spec.interop.functions3.Fuctions3.F$D[Asp] = {
+        F$D.super.<init>();
+        ()
+      };
+      def foo[B](b: B): Unit = {
+        val f6: miniboxing.runtime.MiniboxedFunction2[Asp,B,B] = {
+          @SerialVersionUID(0) final <synthetic> class $anonfun extends miniboxing.runtime.AbstractMiniboxedFunction2$DLL[Asp,B,B] with Serializable {
+            def <init>(): anonymous class $anon = {
+              $anonfun.super.<init>(F$D.this.miniboxing|tests|compile|spec|interop|functions3|Fuctions3|F$D|A$TypeTag);
+              ()
+            };
+            final def apply(x: Asp, y: B): B = $anonfun.this.apply$DLL(F$D.this.miniboxing|tests|compile|spec|interop|functions3|Fuctions3|F$D|A$TypeTag, MiniboxConversionsDouble.this.box2minibox_tt[Asp](x, F$D.this.miniboxing|tests|compile|spec|interop|functions3|Fuctions3|F$D|A$TypeTag), y);
+            override def apply$DLL(T1$TypeTag: Byte, t1: Double, t2: B): B = t2
+          };
+          new anonymous class $anon()
+        };
+        ()
+      }
+    };
+    class F$J[Asp] extends Object with miniboxing.tests.compile.spec.interop.functions3.Fuctions3.F[Asp] {
+      <paramaccessor> private[this] val miniboxing|tests|compile|spec|interop|functions3|Fuctions3|F$J|A$TypeTag: Byte = _;
+      def <init>(miniboxing|tests|compile|spec|interop|functions3|Fuctions3|F$J|A$TypeTag: Byte): miniboxing.tests.compile.spec.interop.functions3.Fuctions3.F$J[Asp] = {
+        F$J.super.<init>();
+        ()
+      };
+      def foo[B](b: B): Unit = {
+        val f6: miniboxing.runtime.MiniboxedFunction2[Asp,B,B] = {
+          @SerialVersionUID(0) final <synthetic> class $anonfun extends miniboxing.runtime.AbstractMiniboxedFunction2$JLL[Asp,B,B] with Serializable {
+            def <init>(): anonymous class $anon = {
+              $anonfun.super.<init>(F$J.this.miniboxing|tests|compile|spec|interop|functions3|Fuctions3|F$J|A$TypeTag);
+              ()
+            };
+            final def apply(x: Asp, y: B): B = $anonfun.this.apply$JLL(F$J.this.miniboxing|tests|compile|spec|interop|functions3|Fuctions3|F$J|A$TypeTag, MiniboxConversionsLong.this.box2minibox_tt[Asp](x, F$J.this.miniboxing|tests|compile|spec|interop|functions3|Fuctions3|F$J|A$TypeTag), y);
+            override def apply$JLL(T1$TypeTag: Byte, t1: Long, t2: B): B = t2
+          };
+          new anonymous class $anon()
+        };
+        ()
+      }
+    };
+    class F$L[Asp] extends Object with miniboxing.tests.compile.spec.interop.functions3.Fuctions3.F[Asp] {
+      def <init>(): miniboxing.tests.compile.spec.interop.functions3.Fuctions3.F$L[Asp] = {
+        F$L.super.<init>();
+        ()
+      };
+      def foo[B](b: B): Unit = {
+        val f6: miniboxing.runtime.MiniboxedFunction2[Asp,B,B] = {
+          @SerialVersionUID(0) final <synthetic> class $anonfun extends miniboxing.runtime.AbstractMiniboxedFunction2$LLL[Asp,B,B] with Serializable {
+            def <init>(): anonymous class $anon = {
+              $anonfun.super.<init>();
+              ()
+            };
+            final def apply(x: Asp, y: B): B = y
+          };
+          new anonymous class $anon()
+        };
+        ()
+      }
+    }
+  }
+}
+[Now checking: minibox-commit]

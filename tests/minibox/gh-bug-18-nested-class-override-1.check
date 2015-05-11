@@ -1,0 +1,52 @@
+[Now checking: minibox-inject]
+[Now checking: minibox-bridge]
+[Not checkable: minibox-coerce]
+Miniboxing plugin warning: Optimizing `MbArray` is only possible if you allow the plugin to use both long and double encodings (remove `P:minibox:Yone-way` compiler option). `MbArray`-s will be generic and will box.
+Miniboxing plugin warning: Optimizing `MbTuple` is only possible if you allow the plugin to use both long and double encodings (remove `P:minibox:Yone-way` compiler option). `MbTuple`-s will be generic and will box.
+[[syntax trees at end of            minibox-commit]] // newSource1.scala
+package miniboxing.tests.compile {
+  abstract trait Dist1[@miniboxed A] extends Object {
+    def apply(a: A): A;
+    def apply$J(A$TypeTag: Byte, a: Long): Long;
+    def iterateUntil(): miniboxing.tests.compile.Dist1[A]
+  };
+  abstract class Dist1$J[Asp] extends Object with miniboxing.tests.compile.Dist1[Asp] {
+    <paramaccessor> private[this] val miniboxing|tests|compile|Dist1$J|A$TypeTag: Byte = _;
+    def <init>(miniboxing|tests|compile|Dist1$J|A$TypeTag: Byte): miniboxing.tests.compile.Dist1$J[Asp] = {
+      Dist1$J.super.<init>();
+      ()
+    };
+    def apply(a: Asp): Asp = MiniboxConversions.this.minibox2box[Asp](Dist1$J.this.apply$J(Dist1$J.this.miniboxing|tests|compile|Dist1$J|A$TypeTag, MiniboxConversions.this.box2minibox_tt[Asp](a, Dist1$J.this.miniboxing|tests|compile|Dist1$J|A$TypeTag)), Dist1$J.this.miniboxing|tests|compile|Dist1$J|A$TypeTag);
+    def apply$J(A$TypeTag: Byte, a: Long): Long;
+    def iterateUntil(): miniboxing.tests.compile.Dist1[Asp] = {
+      final class $anon extends miniboxing.tests.compile.Dist1$J[Asp] {
+        def <init>(): anonymous class $anon = {
+          $anon.super.<init>(Dist1$J.this.miniboxing|tests|compile|Dist1$J|A$TypeTag);
+          ()
+        };
+        def apply(a: Asp): Asp = MiniboxConversions.this.minibox2box[Asp]($anon.this.apply$J(Dist1$J.this.miniboxing|tests|compile|Dist1$J|A$TypeTag, MiniboxConversions.this.box2minibox_tt[Asp](a, Dist1$J.this.miniboxing|tests|compile|Dist1$J|A$TypeTag)), Dist1$J.this.miniboxing|tests|compile|Dist1$J|A$TypeTag);
+        override def apply$J(A$TypeTag: Byte, a: Long): Long = MiniboxConversions.this.box2minibox_tt[Asp](scala.this.Predef.???(), A$TypeTag)
+      };
+      new anonymous class $anon()
+    }
+  };
+  abstract class Dist1$L[Asp] extends Object with miniboxing.tests.compile.Dist1[Asp] {
+    def <init>(): miniboxing.tests.compile.Dist1$L[Asp] = {
+      Dist1$L.super.<init>();
+      ()
+    };
+    def apply(a: Asp): Asp;
+    def apply$J(A$TypeTag: Byte, a: Long): Long = MiniboxConversions.this.box2minibox_tt[Asp](Dist1$L.this.apply(MiniboxConversions.this.minibox2box[Asp](a, A$TypeTag)), A$TypeTag);
+    def iterateUntil(): miniboxing.tests.compile.Dist1[Asp] = {
+      final class $anon extends miniboxing.tests.compile.Dist1$L[Asp] {
+        def <init>(): anonymous class $anon = {
+          $anon.super.<init>();
+          ()
+        };
+        def apply(a: Asp): Asp = scala.this.Predef.???()
+      };
+      new anonymous class $anon()
+    }
+  }
+}
+[Now checking: minibox-commit]

@@ -1,0 +1,36 @@
+[Now checking: minibox-inject]
+[Now checking: minibox-bridge]
+[Not checkable: minibox-coerce]
+Miniboxing plugin warning: Optimizing `MbArray` is only possible if you allow the plugin to use both long and double encodings (remove `P:minibox:Yone-way` compiler option). `MbArray`-s will be generic and will box.
+Miniboxing plugin warning: Optimizing `MbTuple` is only possible if you allow the plugin to use both long and double encodings (remove `P:minibox:Yone-way` compiler option). `MbTuple`-s will be generic and will box.
+[[syntax trees at end of            minibox-commit]] // newSource1.scala
+package miniboxing.tests.compile.erasure11 {
+  abstract trait CCCCC[@miniboxed T] extends Object {
+    def test(c: T): String;
+    def test$J(T$TypeTag: Byte, c: Long): String
+  };
+  class CCCCC$J[Tsp] extends Object with miniboxing.tests.compile.erasure11.CCCCC[Tsp] {
+    <paramaccessor> private[this] val miniboxing|tests|compile|erasure11|CCCCC$J|T$TypeTag: Byte = _;
+    def <init>(miniboxing|tests|compile|erasure11|CCCCC$J|T$TypeTag: Byte): miniboxing.tests.compile.erasure11.CCCCC$J[Tsp] = {
+      CCCCC$J.super.<init>();
+      ()
+    };
+    def test(c: Tsp): String = CCCCC$J.this.test$J(CCCCC$J.this.miniboxing|tests|compile|erasure11|CCCCC$J|T$TypeTag, MiniboxConversions.this.box2minibox_tt[Tsp](c, CCCCC$J.this.miniboxing|tests|compile|erasure11|CCCCC$J|T$TypeTag));
+    def test$J(T$TypeTag: Byte, c: Long): String = if (MiniboxDispatch.this.mboxed_hashCode(c, T$TypeTag).==(0))
+  MiniboxConversions.this.minibox2box[Tsp](c, T$TypeTag)
+else
+  scala.this.Predef.???().toString()
+  };
+  class CCCCC$L[Tsp] extends Object with miniboxing.tests.compile.erasure11.CCCCC[Tsp] {
+    def <init>(): miniboxing.tests.compile.erasure11.CCCCC$L[Tsp] = {
+      CCCCC$L.super.<init>();
+      ()
+    };
+    def test(c: Tsp): String = if (c.hashCode().==(0))
+  c
+else
+  scala.this.Predef.???().toString();
+    def test$J(T$TypeTag: Byte, c: Long): String = CCCCC$L.this.test(MiniboxConversions.this.minibox2box[Tsp](c, T$TypeTag))
+  }
+}
+[Now checking: minibox-commit]

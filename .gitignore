@@ -24,3 +24,5 @@ classes/
 .idea
 .idea_modules
 /.worksheet/
+*.iml
+/out
