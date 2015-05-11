@@ -344,9 +344,9 @@ object Symbols {
 
     type ThisName <: Name
     private[this] var _id: Int = nextId
-    /*if (_id == 6520) {
+    if (_id == 1429) {
       println("plop")
-    }*/
+    }
     //assert(_id != 30214)
 
     /** The unique id of this symbol */

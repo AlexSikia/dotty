@@ -69,7 +69,7 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
     else {
       if(ctx.settings.Yspecialize.value == "all") primitiveTypes
       else Nil
-    }filter(tpe => poly.paramBounds.forall(_.contains(tpe)))
+    }.filter(tpe => poly.paramBounds.forall(_.contains(tpe)))
   }
 
   def requestedSpecialization(decl: Symbol)(implicit ctx: Context): Boolean =
@@ -89,10 +89,9 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
                                (instantiations: List[Type], names: List[String], poly: PolyType, decl: Symbol)
                                (implicit ctx: Context): List[Symbol] = {
       if (remainingTParams.nonEmpty) {
-        val specializations = (for (tpe <- specTypes) yield {
+        (for (tpe <- specTypes) yield {
           generateSpecializations(remainingTParams.tail, specTypes)(tpe :: instantiations, specialisedTypeToSuffix(ctx)(tpe) :: names, poly, decl)
         }).flatten
-        specializations
       }
       else {
         generateSpecializedSymbols(instantiations.reverse, names.reverse, poly, decl)
@@ -144,7 +143,6 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
       case poly: PolyType if !(tree.symbol.isConstructor
         || (tree.symbol is Flags.Label))
         || (tree.symbol.name == nme.asInstanceOf_) =>
-        //|| (tree.symbol.name == nme.isInstanceOf_) =>
         val origTParams = tree.tparams.map(_.symbol)
         val origVParams = tree.vparamss.flatten.map(_.symbol)
 
@@ -170,12 +168,11 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
           }
         } else Nil
         }
-        val specializedMethods = specialize(tree.symbol)
-        Thicket(tree :: specializedMethods)
+        Thicket(tree :: specialize(tree.symbol))
       case _ => tree
     }
   }
-
+/*
   override def transformTypeApply(tree: tpd.TypeApply)(implicit ctx: Context, info: TransformerInfo): Tree = {
 
     val TypeApply(fun,args) = tree
@@ -205,5 +202,5 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
         else ref(best._2)
       } else tree
     } else tree
-  }
+  }*/
 }
