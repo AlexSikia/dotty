@@ -60,7 +60,8 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
       sym.name != nme.asInstanceOf_ &&
       sym.name != nme.isInstanceOf_ &&
       !(sym is Flags.JavaDefined) &&
-      !sym.isConstructor
+      !sym.isConstructor &&
+      !sym.name.toString.contains("Function2")
   }
 
   def getSpecTypes(sym: Symbol, poly: PolyType)(implicit ctx: Context): List[Type] = {
@@ -172,7 +173,7 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
       case _ => tree
     }
   }
-/*
+
   override def transformTypeApply(tree: tpd.TypeApply)(implicit ctx: Context, info: TransformerInfo): Tree = {
 
     val TypeApply(fun,args) = tree
@@ -183,6 +184,8 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
          val argType = a._2
         argType.tpe <:< specializedType
       }).toList
+
+      if (betterDefs.length > 1) ctx.debuglog("Several specialized variants fit.")
       //assert(betterDefs.length < 2) // TODO: How to select the best if there are several ?
 
       if (betterDefs.nonEmpty) {
@@ -202,5 +205,5 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
         else ref(best._2)
       } else tree
     } else tree
-  }*/
+  }
 }

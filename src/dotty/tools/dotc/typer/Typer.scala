@@ -1083,12 +1083,14 @@ class Typer extends Namer with TypeAssigner with Applications with Implicits wit
   protected def encodeName(tree: untpd.NameTree)(implicit ctx: Context): untpd.NameTree =
     untpd.rename(tree, tree.name.encode)
 
-  def typed(tree: untpd.Tree, pt: Type = WildcardType)(implicit ctx: Context): Tree = /*>|>*/ ctx.traceIndented (i"typing $tree", typr, show = true) /*<|<*/ {
-    assertPositioned(tree)
-    try adapt(typedUnadapted(tree, pt), pt, tree)
-    catch {
-      case ex: CyclicReference => errorTree(tree, cyclicErrorMsg(ex))
-      case ex: FatalTypeError => errorTree(tree, ex.getMessage)
+  def typed(tree: untpd.Tree, pt: Type = WildcardType)(implicit ctx: Context): Tree = /*>|>*/ {
+    ctx.traceIndented (i"typing $tree", typr, show = true) /*<|<*/ {
+      assertPositioned(tree)
+      try adapt(typedUnadapted(tree, pt), pt, tree)
+      catch {
+        case ex: CyclicReference => errorTree(tree, cyclicErrorMsg(ex))
+        case ex: FatalTypeError => errorTree(tree, ex.getMessage)
+      }
     }
   }
 
