@@ -102,7 +102,9 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
                                   (implicit ctx: Context): List[Symbol] = {
       val newSym =
         ctx.newSymbol(decl.owner, (decl.name + names.mkString).toTermName,
-                      decl.flags | Flags.Synthetic, poly.instantiate(instantiations.toList))
+                      decl.flags | Flags.Synthetic,poly.instantiate(instantiations.toList))
+                      //poly.derivedPolyType(poly.paramNames, poly.paramBounds,
+                        //                   poly.instantiate(instantiations.toList)))
       val map = newSymbolMap.getOrElse(decl, mutable.HashMap.empty)
       map.put(instantiations, newSym)
       newSymbolMap.put(decl, map)
@@ -150,26 +152,39 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
         def specialize(decl : Symbol): List[Tree] = {
           if (newSymbolMap.contains(decl)) {
             val declSpecs = newSymbolMap(decl)
+
             val newSyms = declSpecs.values.toList
             val instantiations = declSpecs.keys.toArray
             var index = -1
             println(s"specializing ${tree.symbol} for $origTParams")
-          newSyms.map { newSym =>
-            index += 1
-            polyDefDef(newSym.asTerm, { tparams => vparams => {
-              assert(tparams.isEmpty)
-              new TreeTypeMap(
-                typeMap = _
-                  .substDealias(origTParams, instantiations(index))
-                  .subst(origVParams, vparams.flatten.map(_.tpe)),
-                oldOwners = tree.symbol :: Nil,
-                newOwners = newSym :: Nil
-              ).transform(tree.rhs)
-            }})
-          }
+            /*val attempted = newSyms.zip(*/newSyms.map { newSym =>
+              index += 1
+              polyDefDef(newSym.asTerm, { tparams => vparams => {
+                //assert(tparams.isEmpty)
+
+                val tmap: (Tree => Tree) = _ match {
+                  case Return(t, from) if from.symbol == tree.symbol => Return(t, ref(newSym))
+                  case t: TypeApply => transformTypeApply(t)
+                  case t => t
+                }
+
+                new TreeTypeMap(
+                  treeMap = tmap,
+                  typeMap = _
+                    .substDealias(origTParams, instantiations(index))
+                    .subst(origVParams, vparams.flatten.map(_.tpe))
+                  ,
+                  oldOwners = tree.symbol :: Nil,
+                  newOwners = newSym :: Nil
+                ).transform(tree.rhs)
+              }
+              })
+            }//)
+            //attempted.filterNot(a => failedSpec.contains(a._1)).map(_._2)
         } else Nil
         }
-        Thicket(tree :: specialize(tree.symbol))
+        val specialized_trees = specialize(tree.symbol)
+        Thicket(tree :: specialized_trees)
       case _ => tree
     }
   }
@@ -207,3 +222,15 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
     } else tree
   }
 }
+
+/**
+ * var failedSpec: List[Symbol] = List()
+ *
+ *
+ * match {
+                  case t if !poly.bounds.contains(t) => {
+                    failedSpec = newSym :: failedSpec
+                    t
+                  }
+                  case t => t
+  */
