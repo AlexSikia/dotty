@@ -1,5 +1,5 @@
-sealed abstract class Foo[@specialized +A] {
-  def bop[@specialized B >: A]: Foo[B] = new Bar[B](this)
+class Foo[@specialized +A] {
+  def bop[@specialized B >: A] = new Bar[B](this)
 }
 
-case class Bar[@specialized a](tl: Foo[a]) extends Foo[a]
+class Bar[@specialized a](f: Foo[a])
