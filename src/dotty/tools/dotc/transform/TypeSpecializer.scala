@@ -102,9 +102,23 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
                                   (implicit ctx: Context): List[Symbol] = {
       val newSym =
         ctx.newSymbol(decl.owner, (decl.name + names.mkString).toTermName,
-                      decl.flags | Flags.Synthetic,
-                      poly.derivedPolyType(poly.paramNames, poly.paramBounds,
-                                           poly.instantiate(instantiations.toList)))
+          decl.flags | Flags.Synthetic, poly.instantiate(instantiations.toList))
+
+      /* The following generated symbols which kept type bounds. It served, as illustrated by the `this_specialization`
+       * test, as a way of keeping type bounds when instantiating a `this` referring to a generic class. However,
+       * because type bounds are not transitive, this did not work out and we introduced casts instead.
+       *
+       * ctx.newSymbol(decl.owner, (decl.name + names.mkString).toTermName,
+       *               decl.flags | Flags.Synthetic,
+       *               poly.derivedPolyType(poly.paramNames,
+       *                                    (poly.paramBounds zip instantiations).map
+       *                                             {case (bounds, instantiation) =>
+       *                                               TypeBounds(bounds.lo, AndType(bounds.hi, instantiation))},
+       *                                    poly.instantiate(indices, instantiations)
+       *                                    )
+       *               )
+       */
+
       val map = newSymbolMap.getOrElse(decl, mutable.HashMap.empty)
       map.put(instantiations, newSym)
       newSymbolMap.put(decl, map)
@@ -152,30 +166,23 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
         def specialize(decl : Symbol): List[Tree] = {
           if (newSymbolMap.contains(decl)) {
             val declSpecs = newSymbolMap(decl)
-            var failedSpec: List[Symbol] = List()
             val newSyms = declSpecs.values.toList
             val instantiations = declSpecs.keys.toArray
             var index = -1
             println(s"specializing ${tree.symbol} for $origTParams")
-            /*val attempted = newSyms.zip(*/newSyms.map { newSym =>
+            newSyms.map { newSym =>
             index += 1
             polyDefDef(newSym.asTerm, { tparams => vparams => {
-              //assert(tparams.isEmpty)
-
               val tmap: (Tree => Tree) = _ match {
                 case Return(t, from) if from.symbol == tree.symbol => Return(t, ref(newSym))
                 case t: TypeApply => transformTypeApply(t)
+                case t: Apply => transformApply(t)
                 case t => t
               }
 
               new TreeTypeMap(
                 treeMap = tmap,
-                typeMap = _ /*match {
-                  case t if !poly.bounds.contains(t) => {
-                    failedSpec = newSym :: failedSpec
-                    t
-                  }
-                  case t => t*/
+                typeMap = _
                     .substDealias(origTParams, instantiations(index))
                     .subst(origVParams, vparams.flatten.map(_.tpe))
                 ,
@@ -183,8 +190,7 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
                 newOwners = newSym :: Nil
               ).transform(tree.rhs)
             }})
-          }//)
-            //attempted.filterNot(a => failedSpec.contains(a._1)).map(_._2)
+          }
         } else Nil
         }
         val specialized_trees = specialize(tree.symbol)
@@ -194,20 +200,55 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
   }
 
   override def transformTypeApply(tree: tpd.TypeApply)(implicit ctx: Context, info: TransformerInfo): Tree = {
+    val TypeApply(fun, _) = tree
+    if (fun.tpe.isParameterless) rewireTree(tree)
+    tree
+  }
 
+  override def transformApply(tree: Apply)(implicit ctx: Context, info: TransformerInfo): Tree = {
+    val Apply(fun, args) = tree
+    fun match {
+      case fun: TypeApply => {
+        println(
+          s"""
+               |args             ->  ${args}
+
+              |f.fun            ->  ${fun.fun.tree}
+             """.stripMargin)
+
+        val newFun = rewireTree(fun)
+        if (fun ne newFun) {
+        val b = (args zip newFun.tpe.firstParamTypes)
+        val a = b.map{
+          case (arg, tpe) =>
+            arg.ensureConforms(tpe)
+        }
+        Apply(newFun,a)
+        /* zip (instantiations zip paramTypes)).map{
+              case (argType, (specType, castType)) => argType.ensureConforms(specType)})*/
+        } else tree
+      }
+      case _ => tree
+    }
+  }
+
+  def rewireTree(tree: Tree)(implicit ctx: Context): Tree = {
+    assert(tree.isInstanceOf[TypeApply])
     val TypeApply(fun,args) = tree
     if (newSymbolMap.contains(fun.symbol)){
       val newSymInfos = newSymbolMap(fun.symbol)
       val betterDefs = newSymInfos.filter(x => (x._1 zip args).forall{a =>
-         val specializedType = a._1
-         val argType = a._2
+        val specializedType = a._1
+        val argType = a._2
         argType.tpe <:< specializedType
       }).toList
 
-      if (betterDefs.length > 1) ctx.debuglog("Several specialized variants fit.")
-      //assert(betterDefs.length < 2) // TODO: How to select the best if there are several ?
+      if (betterDefs.length > 1) {
+        ctx.debuglog("Several specialized variants fit.")
+        tree
+      }
 
-      if (betterDefs.nonEmpty) {
+      else if (betterDefs.nonEmpty) {
         val best = betterDefs.head
         println(s"method ${fun.symbol.name} of ${fun.symbol.owner} rewired to specialized variant with type (${best._1})")
         val prefix = fun match {
