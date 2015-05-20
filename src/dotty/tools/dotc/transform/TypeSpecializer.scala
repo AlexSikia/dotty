@@ -18,7 +18,7 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
 
   import tpd._
   override def phaseName = "specialize"
-
+  private def defn(implicit ctx:Context) = ctx.definitions
   final val maxTparamsToSpecialize = 2
 
   private final def specialisedTypeToSuffix(implicit ctx: Context) =
@@ -44,15 +44,18 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
       defn.UnitType
     )
 
-  private def defn(implicit ctx:Context) = ctx.definitions
-
-  private val specializationRequests: mutable.HashMap[Symbols.Symbol, List[Type]] = mutable.HashMap.empty
-
-  /**
-   *  A map that links symbols to their specialized variants.
-   *  Each symbol maps to another as map, from the list of specialization types to the specialized symbol.
-   */
-  private val newSymbolMap: mutable.HashMap[Symbol, mutable.HashMap[List[Type], Symbols.Symbol]] = mutable.HashMap.empty
+  // Maps generic methods symbols to new symbols of specialized variants
+  private val newSymbolMap: mutable.HashMap[Symbol, List[Symbols.Symbol]] = mutable.HashMap.empty
+  private val methodsToSpecialize: mutable.Set[Symbol] = mutable.Set.empty
+  // Maps generic methods symbols to lists of specialization types and position of generic types to specialize
+  // (for partial specialization)
+  private val specializationRequests: mutable.HashMap[Symbol, List[(Int, List[Type])]] = mutable.HashMap.empty
+  // Maps new symbols of specialized methods to the list of types they are specialized to, and positions of their
+  // respective generic types (for partial specialization)
+  private val specializationsTParams: mutable.HashMap[Symbol, List[(Int, Type)]] = mutable.HashMap.empty
+  // Maps new symbols of specialized methods to the list of types they are specialized to, including generic types
+  // in the case of partial specialization
+  private val specializationsCompleteTParams: mutable.HashMap[Symbol, List[Type]] = mutable.HashMap.empty
 
   def allowedToSpecialize(sym: Symbol, numOfTypes: Int)(implicit ctx: Context): Boolean = {
     numOfTypes <= maxTparamsToSpecialize &&
@@ -64,45 +67,53 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
       !sym.name.toString.contains("Function2")
   }
 
-  def getSpecTypes(sym: Symbol, poly: PolyType)(implicit ctx: Context): List[Type] = {
-    val requested = specializationRequests.getOrElse(sym, List())
-    if (requested.nonEmpty) requested.toList
+  def getSpecTypes(method: Symbol, poly: PolyType, numOfArgs: Int)(implicit ctx: Context): List[(Int, List[Type])] = {
+    val requested = specializationRequests(method)
+    if (requested.nonEmpty) requested
     else {
-      if(ctx.settings.Yspecialize.value == "all") primitiveTypes
+      if(ctx.settings.Yspecialize.value == "all") 0.to(numOfArgs).toList.map((_, primitiveTypes.filter(tpe => poly.paramBounds.forall(_.contains(tpe)))))
       else Nil
-    }.filter(tpe => poly.paramBounds.forall(_.contains(tpe)))
+    }
   }
 
   def requestedSpecialization(decl: Symbol)(implicit ctx: Context): Boolean =
-    specializationRequests.contains(decl) ||
+    methodsToSpecialize.contains(decl) ||
       (ctx.settings.Yspecialize.value != "" && decl.name.contains(ctx.settings.Yspecialize.value)) ||
       ctx.settings.Yspecialize.value == "all"
 
-  def registerSpecializationRequest(method: Symbols.Symbol)(arguments: List[Type])(implicit ctx: Context) = {
+  def registerSpecializationRequest(method: Symbols.Symbol)(index: Int, arguments: List[Type])(implicit ctx: Context) = {
+    assert(arguments.nonEmpty)
     if(ctx.phaseId > this.treeTransformPhase.id)
       assert(ctx.phaseId <= this.treeTransformPhase.id)
-    val prev = specializationRequests.getOrElse(method, List.empty)
-    specializationRequests.put(method, (arguments ::: prev).toSet.toList)
+    methodsToSpecialize.add(method)
+    val prev: List[(Int, List[Type])] = specializationRequests.getOrElse(method, List())
+    specializationRequests.put(method, (index, arguments) :: prev)
   }
 
   override def transformInfo(tp: Type, sym: Symbol)(implicit ctx: Context): Type = {
-    def generateSpecializations(remainingTParams: List[Name], specTypes: List[Type])
-                               (instantiations: List[Type], names: List[String], poly: PolyType, decl: Symbol)
+    def generateSpecializations(remainingTParams: List[Int], specTypesMap: Map[Int, List[Type]])
+                               (indices: List[Int], instantiations: List[Type], names: List[String], poly: PolyType, decl: Symbol)
                                (implicit ctx: Context): List[Symbol] = {
       if (remainingTParams.nonEmpty) {
-        (for (tpe <- specTypes) yield {
-          generateSpecializations(remainingTParams.tail, specTypes)(tpe :: instantiations, specialisedTypeToSuffix(ctx)(tpe) :: names, poly, decl)
+        (for (tpe <- specTypesMap(remainingTParams.head)) yield {
+          generateSpecializations(remainingTParams.tail, specTypesMap)(remainingTParams.head :: indices, tpe :: instantiations, specialisedTypeToSuffix(ctx)(tpe) :: names, poly, decl)
         }).flatten
       }
       else {
-        generateSpecializedSymbols(instantiations.reverse, names.reverse, poly, decl)
+        generateSpecializedSymbols(indices, instantiations, names, poly, decl)
       }
     }
-    def generateSpecializedSymbols(instantiations: List[Type], names: List[String], poly: PolyType, decl: Symbol)
+    def generateSpecializedSymbols(indices: List[Int], instantiations: List[Type], names: List[String], poly: PolyType, decl: Symbol)
                                   (implicit ctx: Context): List[Symbol] = {
+      assert(indices.length == instantiations.length)
+      val a = tp.typeParams
+      val newPoly = {
+        if (decl.symbol.info.paramTypess.flatten.length == indices.length) poly.instantiate(instantiations)
+        else poly.instantiate(indices, instantiations)
+      }
       val newSym =
         ctx.newSymbol(decl.owner, (decl.name + names.mkString).toTermName,
-                      decl.flags | Flags.Synthetic, poly.instantiate(instantiations.toList))
+                      decl.flags | Flags.Synthetic, newPoly)
 
       /* The following generated symbols which kept type bounds. It served, as illustrated by the `this_specialization`
        * test, as a way of keeping type bounds when instantiating a `this` referring to a generic class. However,
@@ -114,16 +125,15 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
        *                                    (poly.paramBounds zip instantiations).map
        *                                             {case (bounds, instantiation) =>
        *                                               TypeBounds(bounds.lo, AndType(bounds.hi, instantiation))},
-       *                                    poly.instantiate(instantiations.toList)
+       *                                    poly.instantiate(indices, instantiations)
        *                                    )
        *               )
        */
 
-
-      val map = newSymbolMap.getOrElse(decl, mutable.HashMap.empty)
-      map.put(instantiations, newSym)
-      newSymbolMap.put(decl, map)
-      map.values.toList
+      val prevSyms = newSymbolMap.getOrElse(decl, List())
+      newSymbolMap.put(decl, newSym :: prevSyms)
+      specializationsTParams.put(newSym, indices zip instantiations)
+      newSym :: prevSyms
     }
 
     if((sym ne defn.ScalaPredefModule.moduleClass) &&
@@ -136,8 +146,11 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
             .filter(requestedSpecialization)
             .flatMap(decl => {
               decl.info.widen match {
-                case poly: PolyType if allowedToSpecialize(decl.symbol, poly.paramNames.length) =>
-                  generateSpecializations(poly.paramNames, getSpecTypes(decl, poly))(List.empty, List.empty, poly, decl)
+                case poly: PolyType if allowedToSpecialize(decl.symbol, specializationRequests(decl).length) =>
+                  val requestedSpecs = getSpecTypes(decl, poly, decl.typeParams.length)
+                  if (requestedSpecs.nonEmpty)
+                    generateSpecializations(requestedSpecs.map(_._1), requestedSpecs.toMap)(List.empty, List.empty, List.empty, poly, decl)
+                  else Nil
                 case nil => Nil
               }
           })
@@ -146,8 +159,10 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
             classInfo.derivedClassInfo(decls = decls)
         case poly: PolyType if !newSymbolMap.contains(sym) &&
                                requestedSpecialization(sym) &&
-                               allowedToSpecialize(sym, poly.paramNames.length)=>
-          generateSpecializations(poly.paramNames, getSpecTypes(sym, poly))(List.empty, List.empty, poly, sym)
+                               allowedToSpecialize(sym, specializationRequests(sym).length)=>
+          val requestedSpecs = getSpecTypes(sym, poly, sym.typeParams.length)
+          if (requestedSpecs.nonEmpty)
+            generateSpecializations(requestedSpecs.map(_._1), requestedSpecs.toMap)(List.empty, List.empty, List.empty, poly, sym)
         case nil =>
       }
       tp
@@ -165,17 +180,21 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
         val origVParams = tree.vparamss.flatten.map(_.symbol)
 
         def specialize(decl : Symbol): List[Tree] = {
+          def generateAndStoreTParams(newSym: Symbol, tree: DefDef): List[Type] = {
+            val tpars = specializationsTParams(newSym).toMap
+            val a = tree.tparams
+              val b = a/*.map(_.symbol.info)*/.zipWithIndex
+                val instantiations  = b.map{case (origTparam, i) => if (tpars.contains(i)) tpars(i) else origTparam.tpe}
+            if (!specializationsCompleteTParams.contains(newSym)) specializationsCompleteTParams.put(newSym, instantiations)
+            instantiations
+          }
+
           if (newSymbolMap.contains(decl)) {
-            val declSpecs = newSymbolMap(decl)
-            var failedSpec: List[Symbol] = List()
-            val newSyms = declSpecs.values.toList
-            val instantiations = declSpecs.keys.toArray
-            var index = -1
+            val newSyms = newSymbolMap(decl)
             println(s"specializing ${tree.symbol} for $origTParams")
             newSyms.map { newSym =>
-              index += 1
+              val instantiations: List[Type] = generateAndStoreTParams(newSym, tree)
               polyDefDef(newSym.asTerm, { tparams => vparams => {
-                assert(tparams.isEmpty)
                 val tmap: (Tree => Tree) = _ match {
                   case Return(t, from) if from.symbol == tree.symbol => Return(t, ref(newSym))
                   case t: TypeApply => transformTypeApply(t)
@@ -186,7 +205,7 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
                 new TreeTypeMap(
                   treeMap = tmap,
                   typeMap = _
-                    .substDealias(origTParams, instantiations(index))
+                    .substDealias(origTParams, instantiations)
                     .subst(origVParams, vparams.flatten.map(_.tpe)),
                   oldOwners = tree.symbol :: Nil,
                   newOwners = newSym :: Nil
@@ -202,22 +221,22 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
   }
 
   override def transformTypeApply(tree: tpd.TypeApply)(implicit ctx: Context, info: TransformerInfo): Tree = {
-    val TypeApply(fun, _) = tree
-    if (fun.tpe.isParameterless) rewireTree(tree)
-    tree
+    //val TypeApply(fun, _) = tree
+    /*if (fun.tpe.isParameterless)*/ rewireTree(tree)
+    //tree
   }
-
+/*
   override def transformApply(tree: Apply)(implicit ctx: Context, info: TransformerInfo): Tree = {
     val Apply(fun, args) = tree
     fun match {
-      case f: TypeApply => {
+      case f: TypeApply => {/*
         println(
           s"""
              |args             ->  $args
              |fun.symbol       ->  ${f.args.map(_.symbol)}
              |typeParams       ->  ${f.args.map(_.symbol.info.dealias)}
              |typeParams.info  ->  ${f.args.map(_.symbol.info.bounds)}
-           """.stripMargin)
+           """.stripMargin)*/
         //val a = f.args.map(_.symbol.info.bounds.lo)
         val instantiations = f.args.map(_.tpe)
         val paramTypes = args.tpes.map(_.widen)
@@ -227,24 +246,24 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
       case _ => tree
     }
   }
-
+*/
   def rewireTree(tree: Tree)(implicit ctx: Context): Tree = {
     assert(tree.isInstanceOf[TypeApply])
     val TypeApply(fun,args) = tree
     if (newSymbolMap.contains(fun.symbol)){
-      val newSymInfos = newSymbolMap(fun.symbol)
-      val betterDefs = newSymInfos.filter(x => (x._1 zip args).forall{a =>
+      val newSyms = newSymbolMap(fun.symbol)
+      val newSymTypes = newSyms.map(specializationsCompleteTParams)
+      val betterDefs = (newSyms zip newSymTypes).filter(x => (x._2 zip args).forall { a =>
         val specializedType = a._1
         val argType = a._2
         argType.tpe <:< specializedType
-      }).toList
+      })
+
 
       if (betterDefs.length > 1) {
         ctx.debuglog("Several specialized variants fit. Defaulting to no specialization.")
         tree
       }
-      //assert(betterDefs.length < 2) // TODO: How to select the best if there are several ?
-
       else if (betterDefs.nonEmpty) {
         val best = betterDefs.head
         println(s"method ${fun.symbol.name} of ${fun.symbol.owner} rewired to specialized variant with type (${best._1})")
@@ -258,8 +277,8 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
             else EmptyTree
         }
         if (prefix ne EmptyTree)
-          prefix.select(best._2)//.ensureConforms(specType)
-        else ref(best._2)//.ensureConforms(specType)
+          prefix.select(best._1)//.ensureConforms(specType)
+        else ref(best._1)//.ensureConforms(specType)
       } else tree
     } else tree
   }
