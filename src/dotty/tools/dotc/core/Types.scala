@@ -2179,7 +2179,7 @@ object Types {
           tmp.toList
         }
         else if (id == argN.head) {
-          pnames(origPnames.tail, argN.tail, id + 1, tmp)
+          pnames(origPnames.tail, argN.tail, id + 1, tmp += origPnames.head)
         } else {
           pnames(origPnames.tail, argN, id + 1, tmp += origPnames.head)
         }
