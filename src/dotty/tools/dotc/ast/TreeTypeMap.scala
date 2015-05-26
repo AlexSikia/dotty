@@ -62,7 +62,7 @@ class TreeTypeMap(
 
   def mapType(tp: Type) =
     mapOwnerThis(typeMap(tp).substSym(substFrom, substTo))
-  
+
   private def updateDecls(prevStats: List[Tree], newStats: List[Tree]): Unit =
     if (prevStats.isEmpty) assert(newStats.isEmpty)
     else {
@@ -77,7 +77,7 @@ class TreeTypeMap(
       updateDecls(prevStats.tail, newStats.tail)
     }
 
-  override def transform(tree: tpd.Tree)(implicit ctx: Context): tpd.Tree = treeMap(tree) match {
+  override final def transform(tree: tpd.Tree)(implicit ctx: Context): tpd.Tree = treeMap(tree) match {
     case impl @ Template(constr, parents, self, _) =>
       val tmap = withMappedSyms(localSyms(impl :: self :: Nil))
       cpy.Template(impl)(

@@ -180,18 +180,9 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
                   transformApply(t)
                 case t => t
               }
-
-              new TreeTypeMap(
-                treeMap = tmap,
-                typeMap = _
-                    .substDealias(origTParams, instantiations(index))
-                    .subst(origVParams, vparams.flatten.map(_.tpe))
-                ,
-                oldOwners = tree.symbol :: Nil,
-                newOwners = newSym :: Nil
-              ) {
-                // needed to workaround https://github.com/lampepfl/dotty/issues/592
-                override def transform(t: Tree)(implicit ctx: Context) = super.transform(t) match {
+              val tp = new TreeMap() {
+                  // needed to workaround https://github.com/lampepfl/dotty/issues/592
+                  override def transform(t: Tree)(implicit ctx: Context) = super.transform(t) match {
                   case t @ Apply(fun, args) =>
                     val newArgs = (args zip fun.tpe.firstParamTypes).map{case(t, tpe) => t.ensureConforms(tpe)}
                     if (sameTypes(args, newArgs)) {
@@ -203,7 +194,20 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
                     cpy.DefDef(t)(rhs = t.rhs.ensureConforms(t.tpe.finalResultType))
                   case t => t
                 }
-              }.transform(tree.rhs)
+              }
+
+              val typesReplaced = new TreeTypeMap(
+                treeMap = tmap,
+                typeMap = _
+                    .substDealias(origTParams, instantiations(index))
+                    .subst(origVParams, vparams.flatten.map(_.tpe))
+                ,
+                oldOwners = tree.symbol :: Nil,
+                newOwners = newSym :: Nil
+              ).transform(tree.rhs)
+
+              val expectedTypeFixed = tp.transform(typesReplaced)
+              expectedTypeFixed.ensureConforms(newSym.info.widen.finalResultType)
             }})
           }
         } else Nil
