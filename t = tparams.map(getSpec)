@@ -1,0 +1,202 @@
+[1mdiff --git a/project/Build.scala b/project/Build.scala[m
+[1mindex 4236e52..733ffce 100644[m
+[1m--- a/project/Build.scala[m
+[1m+++ b/project/Build.scala[m
+[36m@@ -11,7 +11,7 @@[m [mobject DottyBuild extends Build {[m
+   val TRAVIS_BUILD = "dotty.travis.build"[m
+ [m
+   val agentOptions = List([m
+[31m-    //"-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=5005"[m
+[32m+[m[32m    "-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=5005"[m
+     // "-agentpath:/home/dark/opt/yjp-2013-build-13072/bin/linux-x86-64/libyjpagent.so"[m
+     // "-agentpath:/Applications/YourKit_Java_Profiler_2015_build_15052.app/Contents/Resources/bin/mac/libyjpagent.jnilib",[m
+     // "-XX:+HeapDumpOnOutOfMemoryError", "-Xmx1g", "-Xss2m"[m
+[1mdiff --git a/src/dotty/tools/dotc/transform/PreSpecializer.scala b/src/dotty/tools/dotc/transform/PreSpecializer.scala[m
+[1mindex 6b5ddc5..ee58dd2 100644[m
+[1m--- a/src/dotty/tools/dotc/transform/PreSpecializer.scala[m
+[1m+++ b/src/dotty/tools/dotc/transform/PreSpecializer.scala[m
+[36m@@ -11,63 +11,34 @@[m [mimport dotty.tools.dotc.core.Symbols.Symbol[m
+ import dotty.tools.dotc.core.Types.{TermRef, TypeRef, OrType, Type}[m
+ import dotty.tools.dotc.transform.TreeTransforms.{TransformerInfo, MiniPhaseTransform}[m
+ [m
+[32m+[m[32mimport scala.collection.immutable.HashMap[m
+ import scala.collection.mutable[m
+ [m
+ /**[m
+  * This phase retrieves all `@specialized` anotations before they are thrown away,[m
+  * and stores them for the `TypeSpecializer` phase.[m
+  */[m
+[31m-class PreSpecializer extends MiniPhaseTransform with InfoTransformer {[m
+[32m+[m[32mclass PreSpecializer extends MiniPhaseTransform {[m
+ [m
+   override def phaseName: String = "prespecialize"[m
+ [m
+[31m-  private val specTypes: mutable.HashMap[Symbols.Symbol, List[Type]] = mutable.HashMap.empty[m
+[31m-[m
+[31m-  override def transformInfo(tp: Type, sym: Symbol)(implicit ctx: Context): Type = {[m
+[31m-[m
+[31m-    def getSpecTypes(sym: Symbol)(implicit ctx: Context): List[Type] = {[m
+[31m-[m
+[31m-      def allowedToSpecialize(sym: Symbol): Boolean = {[m
+[31m-        sym.name != nme.asInstanceOf_ &&[m
+[31m-          sym.name != nme.isInstanceOf_ &&[m
+[31m-          !(sym is Flags.JavaDefined) &&[m
+[31m-          !sym.isConstructor//isPrimaryConstructor[m
+[31m-      }[m
+[31m-[m
+[31m-      if (allowedToSpecialize(sym)) {[m
+[31m-        val annotation = sym.denot.getAnnotation(ctx.definitions.specializedAnnot).getOrElse(Nil)[m
+[31m-        annotation match {[m
+[31m-          case annot: Annotation =>[m
+[31m-            val args = annot.arguments[m
+[31m-            if (args.isEmpty) primitiveTypes[m
+[31m-            else args.head match {[m
+[31m-              case a@Typed(SeqLiteral(types), _) => types.map(t => nameToType(t.tpe)) // Matches the expected `@specialized(...)` annotations[m
+[31m-              case a@Select(Ident(_), _)         => primitiveTypes  // Matches `Select(Ident(Specializable), Primitives)` which is used in several instances[m
+[31m-              case _ => ctx.error("surprising match on specialized annotation"); Nil[m
+[31m-            }[m
+[31m-          case nil => Nil[m
+[31m-        }[m
+[31m-      } else Nil[m
+[31m-    }[m
+[31m-    val st = getSpecTypes(sym)[m
+[31m-    if (st.nonEmpty) {[m
+[31m-      specTypes.put(sym.owner, st)[m
+[31m-    }[m
+[31m-    tp[m
+[31m-  }[m
+[32m+[m[32m  /**[m
+[32m+[m[32m   *  This map keeps links between generic methods, to generic parameters, to specialized types[m
+[32m+[m[32m   */[m
+[32m+[m[32m  //private val specTypes: mutable.Map[Symbols.Symbol, Map[Symbols.Symbol, List[Type]]] = mutable.Map.empty[m
+ [m
+   private final def nameToType(name: Type)(implicit ctx: Context) =[m
+     name.asInstanceOf[TermRef].name.toString match {[m
+[31m-            case s if s.startsWith("Int")     => defn.IntType[m
+[31m-            case s if s.startsWith("Boolean") => defn.BooleanType[m
+[31m-            case s if s.startsWith("Byte")    => defn.ByteType[m
+[31m-            case s if s.startsWith("Long")    => defn.LongType[m
+[31m-            case s if s.startsWith("Short")   => defn.ShortType[m
+[31m-            case s if s.startsWith("Float")   => defn.FloatType[m
+[31m-            case s if s.startsWith("Unit")    => defn.UnitType[m
+[31m-            case s if s.startsWith("Double")  => defn.DoubleType[m
+[31m-            case s if s.startsWith("Char")    => defn.CharType[m
+[31m-  }[m
+[32m+[m[32m      case s if s.startsWith("Int")     => defn.IntType[m
+[32m+[m[32m      case s if s.startsWith("Boolean") => defn.BooleanType[m
+[32m+[m[32m      case s if s.startsWith("Byte")    => defn.ByteType[m
+[32m+[m[32m      case s if s.startsWith("Long")    => defn.LongType[m
+[32m+[m[32m      case s if s.startsWith("Short")   => defn.ShortType[m
+[32m+[m[32m      case s if s.startsWith("Float")   => defn.FloatType[m
+[32m+[m[32m      case s if s.startsWith("Unit")    => defn.UnitType[m
+[32m+[m[32m      case s if s.startsWith("Double")  => defn.DoubleType[m
+[32m+[m[32m      case s if s.startsWith("Char")    => defn.CharType[m
+[32m+[m[32m    }[m
+ [m
+   def defn(implicit ctx: Context): Definitions = ctx.definitions[m
+ [m
+[36m@@ -83,9 +54,40 @@[m [mclass PreSpecializer extends MiniPhaseTransform with InfoTransformer {[m
+       ctx.definitions.UnitType[m
+     )[m
+ [m
+[32m+[m[32m  def getSpec(sym: Symbol)(implicit ctx: Context): List[Type] = {[m
+[32m+[m
+[32m+[m[32m    def allowedToSpecialize(sym: Symbol): Boolean = {[m
+[32m+[m[32m      sym.name != nme.asInstanceOf_ &&[m
+[32m+[m[32m        sym.name != nme.isInstanceOf_ &&[m
+[32m+[m[32m        !(sym is Flags.JavaDefined) &&[m
+[32m+[m[32m        !sym.isConstructor//isPrimaryConstructor[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    if (allowedToSpecialize(sym)) {[m
+[32m+[m[32m      val annotation = sym.denot.getAnnotation(ctx.definitions.specializedAnnot).getOrElse(Nil)[m
+[32m+[m[32m      annotation match {[m
+[32m+[m[32m        case annot: Annotation =>[m
+[32m+[m[32m          val args = annot.arguments[m
+[32m+[m[32m          if (args.isEmpty) primitiveTypes[m
+[32m+[m[32m          else args.head match {[m
+[32m+[m[32m            case a@Typed(SeqLiteral(types), _) => types.map(t => nameToType(t.tpe)) // Matches the expected `@specialized(...)` annotations[m
+[32m+[m[32m            case a@Select(Ident(_), _)         => primitiveTypes  // Matches `Select(Ident(Specializable), Primitives)` which is used in several instances[m
+[32m+[m[32m            case _ => ctx.error("surprising match on specialized annotation"); Nil[m
+[32m+[m[32m          }[m
+[32m+[m[32m        case nil => Nil[m
+[32m+[m[32m      }[m
+[32m+[m[32m    } else Nil[m
+[32m+[m[32m  }[m
+[32m+[m
+   override def transformDefDef(tree: tpd.DefDef)(implicit ctx: Context, info: TransformerInfo): tpd.Tree = {[m
+[31m-    val st = specTypes.getOrElse(tree.symbol, List())[m
+[31m-    if (st.nonEmpty) ctx.specializePhase.asInstanceOf[TypeSpecializer].registerSpecializationRequest(tree.symbol)(st)[m
+[32m+[m[32m    val tparams = tree.tparams.map(_.symbol)[m
+[32m+[m[32m    val st = tparams.zipWithIndex.map{case (sym, i) => (i, getSpec(sym))}[m
+[32m+[m[32m    if (st.nonEmpty) {[m
+[32m+[m[32m      st.map{[m
+[32m+[m[32m        case (index, types) if types.nonEmpty => ctx.specializePhase.asInstanceOf[TypeSpecializer].registerSpecializationRequest(tree.symbol)(index, types)[m
+[32m+[m[32m        case _ =>[m
+[32m+[m[32m      }[m
+[32m+[m[32m    }[m
+     tree[m
+   }[m
+ }[m
+[1mdiff --git a/src/dotty/tools/dotc/transform/TypeSpecializer.scala b/src/dotty/tools/dotc/transform/TypeSpecializer.scala[m
+[1mindex 9895382..c2c8944 100644[m
+[1m--- a/src/dotty/tools/dotc/transform/TypeSpecializer.scala[m
+[1m+++ b/src/dotty/tools/dotc/transform/TypeSpecializer.scala[m
+[36m@@ -64,13 +64,14 @@[m [mclass TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {[m
+       !sym.name.toString.contains("Function2")[m
+   }[m
+ [m
+[31m-  def getSpecTypes(sym: Symbol, poly: PolyType)(implicit ctx: Context): List[Type] = {[m
+[31m-    val requested = specializationRequests.getOrElse(sym, List())[m
+[31m-    if (requested.nonEmpty) requested.toList[m
+[32m+[m[32m  def getSpecTypes(method: Symbol, poly: PolyType)(implicit ctx: Context): List[Type] = {[m
+[32m+[m[32m    assert(specializationRequests.contains(method))[m
+[32m+[m[32m    val requested = specializationRequests(method)[m
+[32m+[m[32m    if (requested.nonEmpty) requested[m
+     else {[m
+[31m-      if(ctx.settings.Yspecialize.value == "all") primitiveTypes[m
+[32m+[m[32m      if(ctx.settings.Yspecialize.value == "all") primitiveTypes.filter(tpe => poly.paramBounds.forall(_.contains(tpe)))[m
+       else Nil[m
+[31m-    }.filter(tpe => poly.paramBounds.forall(_.contains(tpe)))[m
+[32m+[m[32m    }[m
+   }[m
+ [m
+   def requestedSpecialization(decl: Symbol)(implicit ctx: Context): Boolean =[m
+[36m@@ -79,12 +80,14 @@[m [mclass TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {[m
+       ctx.settings.Yspecialize.value == "all"[m
+ [m
+   def registerSpecializationRequest(method: Symbols.Symbol)(arguments: List[Type])(implicit ctx: Context) = {[m
+[32m+[m[32m    assert(arguments.nonEmpty)[m
+     if(ctx.phaseId > this.treeTransformPhase.id)[m
+       assert(ctx.phaseId <= this.treeTransformPhase.id)[m
+     val prev = specializationRequests.getOrElse(method, List.empty)[m
+[31m-    specializationRequests.put(method, (arguments ::: prev).toSet.toList)[m
+[32m+[m[32m    specializationRequests.put(method, arguments ::: prev)[m
+   }[m
+ [m
+[32m+[m
+   override def transformInfo(tp: Type, sym: Symbol)(implicit ctx: Context): Type = {[m
+     def generateSpecializations(remainingTParams: List[Name], specTypes: List[Type])[m
+                                (instantiations: List[Type], names: List[String], poly: PolyType, decl: Symbol)[m
+[1mdiff --git a/test/dotc/tests.scala b/test/dotc/tests.scala[m
+[1mindex 2082bb4..5ec13ca 100644[m
+[1m--- a/test/dotc/tests.scala[m
+[1m+++ b/test/dotc/tests.scala[m
+[36m@@ -61,7 +61,7 @@[m [mclass tests extends CompilerTest {[m
+   //@Test def pickle_core = compileDir(dotcDir, "core", testPickling, xerrors = 2) // two spurious comparison errors in Types and TypeOps[m
+ [m
+   @Test def pos_t2168_pat = compileFile(posDir, "t2168", twice)[m
+[31m-  @Test def pos_erasure = compileFile(posDir, "erasure", twice)[m
+[32m+[m[32m  */@Test def pos_erasure = compileFile(posDir, "erasure", twice)/*[m
+   @Test def pos_Coder() = compileFile(posDir, "Coder", twice)[m
+   @Test def pos_blockescapes() = compileFile(posDir, "blockescapes", twice)[m
+   @Test def pos_collections() = compileFile(posDir, "collections", twice)[m
+[36m@@ -150,7 +150,7 @@[m [mclass tests extends CompilerTest {[m
+   */[m
+ [m
+   //@Test def run_all = runFiles(runDir)[m
+[31m-  @Test def run_spec = runFile(runDir, "specialization")[m
+[32m+[m[32m  //@Test def run_spec = runFile(runDir, "specialization")[m
+ [m
+ /*[m
+   @Test def dotty = compileDir(dottyDir, "tools", "-deep" :: allowDeepSubtypes ++ twice) // note the -deep argument[m

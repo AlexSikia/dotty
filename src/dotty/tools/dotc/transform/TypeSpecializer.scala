@@ -64,13 +64,14 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
       !sym.name.toString.contains("Function2")
   }
 
-  def getSpecTypes(sym: Symbol, poly: PolyType)(implicit ctx: Context): List[Type] = {
-    val requested = specializationRequests.getOrElse(sym, List())
-    if (requested.nonEmpty) requested.toList
+  def getSpecTypes(method: Symbol, poly: PolyType)(implicit ctx: Context): List[Type] = {
+    assert(specializationRequests.contains(method))
+    val requested = specializationRequests(method)
+    if (requested.nonEmpty) requested
     else {
-      if(ctx.settings.Yspecialize.value == "all") primitiveTypes
+      if(ctx.settings.Yspecialize.value == "all") primitiveTypes.filter(tpe => poly.paramBounds.forall(_.contains(tpe)))
       else Nil
-    }.filter(tpe => poly.paramBounds.forall(_.contains(tpe)))
+    }
   }
 
   def requestedSpecialization(decl: Symbol)(implicit ctx: Context): Boolean =
@@ -82,7 +83,7 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
     if(ctx.phaseId > this.treeTransformPhase.id)
       assert(ctx.phaseId <= this.treeTransformPhase.id)
     val prev = specializationRequests.getOrElse(method, List.empty)
-    specializationRequests.put(method, (arguments ::: prev).toSet.toList)
+    specializationRequests.put(method, arguments ::: prev)
   }
 
   override def transformInfo(tp: Type, sym: Symbol)(implicit ctx: Context): Type = {
