@@ -4,15 +4,11 @@ import dotty.tools.dotc.ast.Trees.{Select, Ident, SeqLiteral, Typed}
 import dotty.tools.dotc.ast.tpd
 import dotty.tools.dotc.core.Annotations.Annotation
 import dotty.tools.dotc.core.Contexts.Context
-import dotty.tools.dotc.core.DenotTransformers.InfoTransformer
 import dotty.tools.dotc.core.StdNames._
 import dotty.tools.dotc.core.{Flags, Definitions, Symbols}
 import dotty.tools.dotc.core.Symbols.Symbol
-import dotty.tools.dotc.core.Types.{TermRef, TypeRef, OrType, Type}
+import dotty.tools.dotc.core.Types.{TermRef, Type}
 import dotty.tools.dotc.transform.TreeTransforms.{TransformerInfo, MiniPhaseTransform}
-
-import scala.collection.immutable.HashMap
-import scala.collection.mutable
 
 /**
  * This phase retrieves all `@specialized` anotations before they are thrown away,
@@ -21,11 +17,6 @@ import scala.collection.mutable
 class PreSpecializer extends MiniPhaseTransform {
 
   override def phaseName: String = "prespecialize"
-
-  /**
-   *  This map keeps links between generic methods, to generic parameters, to specialized types
-   */
-  //private val specTypes: mutable.Map[Symbols.Symbol, Map[Symbols.Symbol, List[Type]]] = mutable.Map.empty
 
   private final def nameToType(name: Type)(implicit ctx: Context) =
     name.asInstanceOf[TermRef].name.toString match {
@@ -60,7 +51,7 @@ class PreSpecializer extends MiniPhaseTransform {
       sym.name != nme.asInstanceOf_ &&
         sym.name != nme.isInstanceOf_ &&
         !(sym is Flags.JavaDefined) &&
-        !sym.isConstructor//isPrimaryConstructor
+        !sym.isConstructor
     }
 
     if (allowedToSpecialize(sym)) {
