@@ -99,12 +99,18 @@ object NameOps {
 
     /** Is this the name of a higher-kinded type parameter of a Lambda? */
     def isLambdaArgName =
-      name.length > 0 && name.head == tpnme.LAMBDA_ARG_PREFIXhead && name.startsWith(tpnme.LAMBDA_ARG_PREFIX)
+      name.length > 0 &&
+      name.head == tpnme.LAMBDA_ARG_PREFIXhead &&
+      name.startsWith(tpnme.LAMBDA_ARG_PREFIX) && {
+        val digits = name.drop(tpnme.LAMBDA_ARG_PREFIX.length)
+        digits.length <= 4 && digits.forall(_.isDigit)
+      }
 
     /** The index of the higher-kinded type parameter with this name.
      *  Pre: isLambdaArgName.
      */
-    def lambdaArgIndex: Int = name.drop(name.lastIndexOf('$') + 1).toString.toInt
+    def lambdaArgIndex: Int =
+      name.drop(tpnme.LAMBDA_ARG_PREFIX.length).toString.toInt
 
     /** If the name ends with $nn where nn are
       * all digits, strip the $ and the digits.
@@ -113,7 +119,7 @@ object NameOps {
     def stripAnonNumberSuffix: Name = {
       var pos = name.length
       while (pos > 0 && name(pos - 1).isDigit)
-      pos -= 1
+        pos -= 1
 
       if (pos > 0 && pos < name.length && name(pos - 1) == '$')
         name take (pos - 1)
@@ -145,12 +151,12 @@ object NameOps {
     }.asInstanceOf[N]
 
     /** The superaccessor for method with given name */
-    def superName: TermName =  (nme.SUPER_PREFIX ++ name).toTermName
+    def superName: TermName = (nme.SUPER_PREFIX ++ name).toTermName
 
     /** The expanded name of `name` relative to given class `base`.
      */
     def expandedName(base: Symbol)(implicit ctx: Context): N =
-      expandedName(if (base is Flags.ExpandedName) base.name else base.fullNameSeparated('$'))
+      expandedName(if (base is Flags.ExpandedName) base.name else base.fullNameSeparated("$"))
 
     /** The expanded name of `name` relative to `basename` with given `separator`
      */
@@ -222,6 +228,28 @@ object NameOps {
       case nme.length => nme.primitive.arrayLength
       case nme.update => nme.primitive.arrayUpdate
       case nme.clone_ => nme.clone_
+    }
+
+    def specializedFor(returnType: Types.Type, args: List[Types.Type])(implicit ctx: Context): name.ThisName = {
+
+      def typeToTag(tp: Types.Type): Name = {
+        tp.classSymbol match {
+          case t if t eq defn.IntClass     => nme.specializedTypeNames.Int
+          case t if t eq defn.BooleanClass => nme.specializedTypeNames.Boolean
+          case t if t eq defn.ByteClass    => nme.specializedTypeNames.Byte
+          case t if t eq defn.LongClass    => nme.specializedTypeNames.Long
+          case t if t eq defn.ShortClass   => nme.specializedTypeNames.Short
+          case t if t eq defn.FloatClass   => nme.specializedTypeNames.Float
+          case t if t eq defn.UnitClass    => nme.specializedTypeNames.Void
+          case t if t eq defn.DoubleClass  => nme.specializedTypeNames.Double
+          case t if t eq defn.CharClass    => nme.specializedTypeNames.Char
+          case _                           => nme.specializedTypeNames.Object
+        }
+      }
+
+      name.fromName(name ++ nme.specializedTypeNames.prefix ++
+        args.map(typeToTag).foldRight(typeToTag(returnType))(_ ++ _) ++
+        nme.specializedTypeNames.suffix)
     }
 
     /** If name length exceeds allowable limit, replace part of it by hash */

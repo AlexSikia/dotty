@@ -13,7 +13,7 @@ import dotty.tools.io.{ ClassPath, AbstractFile }
 import Contexts._, Symbols._, Flags._, SymDenotations._, Types._, Scopes._, util.Positions._, Names._
 import StdNames._, NameOps._
 import Decorators.{StringDecorator, StringInterpolators}
-import pickling.ClassfileParser
+import classfile.ClassfileParser
 import scala.util.control.NonFatal
 
 object SymbolLoaders {
@@ -182,7 +182,7 @@ abstract class SymbolLoader extends LazyType {
 
   def sourceFileOrNull: AbstractFile = null
 
-  /** Description of the resource (ClassPath, AbstractFile, MsilFile)
+  /** Description of the resource (ClassPath, AbstractFile)
    *  being processed by this loader
    */
   def description: String
@@ -251,7 +251,10 @@ class ClassfileLoader(val classfile: AbstractFile) extends SymbolLoader {
     else (rootDenot, linkedDenot)
   }
 
-  def doComplete(root: SymDenotation)(implicit ctx: Context): Unit = {
+  override def doComplete(root: SymDenotation)(implicit ctx: Context): Unit =
+    load(root)
+
+  def load(root: SymDenotation)(implicit ctx: Context): Option[ClassfileParser.Embedded] = {
     val (classRoot, moduleRoot) = rootDenots(root.asClass)
     new ClassfileParser(classfile, classRoot, moduleRoot)(ctx).run()
   }

@@ -2,6 +2,7 @@ package dotty.tools
 package dotc
 package ast
 
+import dotty.tools.dotc.transform.ExplicitOuter
 import dotty.tools.dotc.typer.ProtoTypes.FunProtoTyped
 import transform.SymUtils._
 import core._
@@ -209,7 +210,8 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
     ta.assignType(untpd.TypeDef(sym.name, TypeTree(sym.info)), sym)
 
   def ClassDef(cls: ClassSymbol, constr: DefDef, body: List[Tree], superArgs: List[Tree] = Nil)(implicit ctx: Context): TypeDef = {
-    val firstParent :: otherParents = cls.info.parents
+    val firstParentRef :: otherParentRefs = cls.info.parents
+    val firstParent = cls.typeRef.baseTypeWithArgs(firstParentRef.symbol)
     val superRef =
       if (cls is Trait) TypeTree(firstParent)
       else {
@@ -224,7 +226,7 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
         val constr = firstParent.decl(nme.CONSTRUCTOR).suchThat(constr => isApplicable(constr.info))
         New(firstParent, constr.symbol.asTerm, superArgs)
       }
-    val parents = superRef :: otherParents.map(TypeTree(_))
+    val parents = superRef :: otherParentRefs.map(TypeTree(_))
 
     val selfType =
       if (cls.classInfo.selfInfo ne NoType) ValDef(ctx.newSelfSym(cls))
@@ -243,8 +245,45 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
     ta.assignType(untpd.TypeDef(cls.name, impl), cls)
   }
 
+  /** An anonymous class
+   *
+   *      new parents { forwarders }
+   *
+   *  where `forwarders` contains forwarders for all functions in `fns`.
+   *  @param parents    a non-empty list of class types
+   *  @param fns        a non-empty of functions for which forwarders should be defined in the class.
+   *  The class has the same owner as the first function in `fns`.
+   *  Its position is the union of all functions in `fns`.
+   */
+  def AnonClass(parents: List[Type], fns: List[TermSymbol], methNames: List[TermName])(implicit ctx: Context): Block = {
+    val owner = fns.head.owner
+    val parents1 =
+      if (parents.head.classSymbol.is(Trait)) defn.ObjectClass.typeRef :: parents
+      else parents
+    val cls = ctx.newNormalizedClassSymbol(owner, tpnme.ANON_FUN, Synthetic, parents1,
+        coord = fns.map(_.pos).reduceLeft(_ union _))
+    val constr = ctx.newConstructor(cls, Synthetic, Nil, Nil).entered
+    def forwarder(fn: TermSymbol, name: TermName) = {
+      val fwdMeth = fn.copy(cls, name, Synthetic | Method).entered.asTerm
+      DefDef(fwdMeth, prefss => ref(fn).appliedToArgss(prefss))
+    }
+    val forwarders = (fns, methNames).zipped.map(forwarder)
+    val cdef = ClassDef(cls, DefDef(constr), forwarders)
+    Block(cdef :: Nil, New(cls.typeRef, Nil))
+  }
+
+  // { <label> def while$(): Unit = if (cond) { body; while$() } ; while$() }
+  def WhileDo(owner: Symbol, cond: Tree, body: List[Tree])(implicit ctx: Context): Tree = {
+    val sym = ctx.newSymbol(owner, nme.WHILE_PREFIX, Flags.Label | Flags.Synthetic,
+      MethodType(Nil, defn.UnitType), coord = cond.pos)
+
+    val call = Apply(ref(sym), Nil)
+    val rhs = If(cond, Block(body, call), unitLiteral)
+    Block(List(DefDef(sym, rhs)), call)
+  }
+
   def Import(expr: Tree, selectors: List[untpd.Tree])(implicit ctx: Context): Import =
-    ta.assignType(untpd.Import(expr, selectors), ctx.newImportSymbol(expr))
+    ta.assignType(untpd.Import(expr, selectors), ctx.newImportSymbol(ctx.owner, expr))
 
   def PackageDef(pid: RefTree, stats: List[Tree])(implicit ctx: Context): PackageDef =
     ta.assignType(untpd.PackageDef(pid, stats), pid)
@@ -288,7 +327,16 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
     if (tp.isType) TypeTree(tp)
     else if (prefixIsElidable(tp)) Ident(tp)
     else tp.prefix match {
-      case pre: SingletonType => singleton(pre).select(tp)
+      case pre: SingletonType =>
+        val prefix =
+          singleton(pre) match {
+            case t: This if ctx.erasedTypes && !(t.symbol == ctx.owner.enclosingClass || t.symbol.isStaticOwner) =>
+              // after erasure outer paths should be respected
+              new ExplicitOuter.OuterOps(ctx).path(t.tpe.widen.classSymbol)
+            case t =>
+              t
+          }
+        prefix.select(tp)
       case pre => SelectFromTypeTree(TypeTree(pre), tp)
     } // no checks necessary
 
@@ -383,6 +431,7 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
     else if (tpw isRef defn.ShortClass) Literal(Constant(0.toShort))
     else Literal(Constant(null)).select(defn.Any_asInstanceOf).appliedToType(tpe)
   }
+
   private class FindLocalDummyAccumulator(cls: ClassSymbol)(implicit ctx: Context) extends TreeAccumulator[Symbol] {
     def apply(sym: Symbol, tree: Tree)(implicit ctx: Context) =
       if (sym.exists) sym
@@ -409,7 +458,7 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
     override def Select(tree: Tree)(qualifier: Tree, name: Name)(implicit ctx: Context): Select = {
       val tree1 = untpd.cpy.Select(tree)(qualifier, name)
       tree match {
-        case tree: Select if (qualifier.tpe eq tree.qualifier.tpe) =>
+        case tree: Select if qualifier.tpe eq tree.qualifier.tpe =>
           tree1.withTypeUnchecked(tree.tpe)
         case _ => tree.tpe match {
           case tpe: NamedType => tree1.withType(tpe.derivedSelect(qualifier.tpe))
@@ -455,7 +504,7 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
     override def Block(tree: Tree)(stats: List[Tree], expr: Tree)(implicit ctx: Context): Block = {
       val tree1 = untpd.cpy.Block(tree)(stats, expr)
       tree match {
-        case tree: Block if (expr.tpe eq tree.expr.tpe) => tree1.withTypeUnchecked(tree.tpe)
+        case tree: Block if expr.tpe eq tree.expr.tpe => tree1.withTypeUnchecked(tree.tpe)
         case _ => ta.assignType(tree1, stats, expr)
       }
     }
@@ -483,7 +532,7 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
     override def CaseDef(tree: Tree)(pat: Tree, guard: Tree, body: Tree)(implicit ctx: Context): CaseDef = {
       val tree1 = untpd.cpy.CaseDef(tree)(pat, guard, body)
       tree match {
-        case tree: CaseDef if (body.tpe eq tree.body.tpe) => tree1.withTypeUnchecked(tree.tpe)
+        case tree: CaseDef if body.tpe eq tree.body.tpe => tree1.withTypeUnchecked(tree.tpe)
         case _ => ta.assignType(tree1, body)
       }
     }
@@ -494,7 +543,7 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
     override def Try(tree: Tree)(expr: Tree, cases: List[CaseDef], finalizer: Tree)(implicit ctx: Context): Try = {
       val tree1 = untpd.cpy.Try(tree)(expr, cases, finalizer)
       tree match {
-        case tree: Try if (expr.tpe eq tree.expr.tpe) && (sameTypes(cases, tree.cases)) => tree1.withTypeUnchecked(tree.tpe)
+        case tree: Try if (expr.tpe eq tree.expr.tpe) && sameTypes(cases, tree.cases) => tree1.withTypeUnchecked(tree.tpe)
         case _ => ta.assignType(tree1, expr, cases)
       }
     }
@@ -562,7 +611,7 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
           loop(from.owner, from :: froms, to :: tos)
         else {
           //println(i"change owner ${from :: froms}%, % ==> $tos of $tree")
-          new TreeTypeMap(oldOwners = from :: froms, newOwners = tos).apply(tree)
+          new TreeTypeMap(oldOwners = from :: froms, newOwners = tos)(ctx.withMode(Mode.FutureDefsOK)).apply(tree)
         }
       }
       loop(from, Nil, to :: Nil)
@@ -577,8 +626,11 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
         def traverse(tree: Tree)(implicit ctx: Context) = tree match {
           case tree: DefTree =>
             val sym = tree.symbol
-            if (sym.denot(ctx.withPhase(trans)).owner == from)
-              sym.copySymDenotation(owner = to).installAfter(trans)
+            if (sym.denot(ctx.withPhase(trans)).owner == from) {
+              val d = sym.copySymDenotation(owner = to)
+              d.installAfter(trans)
+              d.transformAfter(trans, d => if (d.owner eq from) d.copySymDenotation(owner = to) else d)
+            }
             if (sym.isWeakOwner) traverseChildren(tree)
           case _ =>
             traverseChildren(tree)
@@ -762,7 +814,7 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
         expectedType match {
           case defn.ArrayType(el) =>
             lastParam.tpe match {
-              case defn.ArrayType(el2) if (el2 <:< el) =>
+              case defn.ArrayType(el2) if el2 <:< el =>
                 // we have a JavaSeqLiteral with a more precise type
                 // we cannot construct a tree as JavaSeqLiteral infered to precise type
                 // if we add typed than it would be both type-correct and
@@ -813,7 +865,7 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
     }
   }
 
-  /** A traverser that passes the enlcosing class or method as an argumenr
+  /** A traverser that passes the enclosing class or method as an argument
    *  to the traverse method.
    */
   abstract class EnclosingMethodTraverser extends TreeAccumulator[Symbol] {

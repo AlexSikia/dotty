@@ -40,3 +40,6 @@ tests/partest-generated/
 /tests/method_minibox/
 /tests/more_minibox/
 /tests/minibox/
+
+tests/locks/
+/test-classes/

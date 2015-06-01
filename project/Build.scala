@@ -2,19 +2,29 @@ import sbt.Keys._
 import sbt._
 import java.io.{ RandomAccessFile, File }
 import java.nio.channels.FileLock
+import scala.reflect.io.Path
 
 object DottyBuild extends Build {
+
+  val travisMemLimit = List("-Xmx1g", "-Xss2m")
 
   val TRAVIS_BUILD = "dotty.travis.build"
 
   val agentOptions = List(
-    "-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=5005"
+    //"-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=5005"
     // "-agentpath:/home/dark/opt/yjp-2013-build-13072/bin/linux-x86-64/libyjpagent.so"
+    // "-agentpath:/Applications/YourKit_Java_Profiler_2015_build_15052.app/Contents/Resources/bin/mac/libyjpagent.jnilib",
+    // "-XX:+HeapDumpOnOutOfMemoryError", "-Xmx1g", "-Xss2m"
   )
 
-  var partestLock: FileLock = null
-
   val defaults = Defaults.defaultSettings ++ Seq(
+    scalaVersion in Global := "2.11.5",
+    version in Global := "0.1-SNAPSHOT",
+    organization in Global := "org.scala-lang",
+    organizationName in Global := "LAMP/EPFL",
+    organizationHomepage in Global := Some(url("http://lamp.epfl.ch")),
+    homepage in Global := Some(url("https://github.com/lampepfl/dotty")),
+
     // set sources to src/, tests to test/ and resources to resources/
     scalaSource in Compile := baseDirectory.value / "src",
     javaSource in Compile := baseDirectory.value / "src",
@@ -31,15 +41,15 @@ object DottyBuild extends Build {
     // to get Scala 2.11
     resolvers += Resolver.sonatypeRepo("releases"),
 
-    // get reflect and xml onboard
-    libraryDependencies ++= Seq("org.scala-lang" % "scala-reflect" % scalaVersion.value,
-                                "org.scala-lang.modules" %% "scala-xml" % "1.0.1",
-                                "me.d-d" % "scala-compiler" % "2.11.5-20150416-144435-09c4a520e1",
+    // get libraries onboard
+    partestDeps := Seq("me.d-d" % "scala-compiler" % "2.11.5-20150506-175515-8fc7635b56",
+                      "org.scala-lang" % "scala-reflect" % scalaVersion.value,
+                      "org.scala-lang" % "scala-library" % scalaVersion.value % "test"),
+    libraryDependencies ++= partestDeps.value,
+    libraryDependencies ++= Seq("org.scala-lang.modules" %% "scala-xml" % "1.0.1",
                                 "org.scala-lang.modules" %% "scala-partest" % "1.0.5" % "test",
+                                "com.novocode" % "junit-interface" % "0.11" % "test",
                                 "jline" % "jline" % "2.12"),
-
-    // get junit onboard
-    libraryDependencies += "com.novocode" % "junit-interface" % "0.11" % "test",
 
     // scalac options
     scalacOptions in Global ++= Seq("-feature", "-deprecation", "-language:_"),
@@ -51,14 +61,30 @@ object DottyBuild extends Build {
 
     // enable verbose exception messages for JUnit
     testOptions in Test += Tests.Argument(TestFrameworks.JUnit, "-a", "-v", "--run-listener=test.ContextEscapeDetector"),
-    testOptions in Test += Tests.Cleanup({ () => if (partestLock != null) partestLock.release }),
-    // when this file is locked, running test generates the files for partest
-    // otherwise it just executes the tests directly
+    testOptions in Test += Tests.Cleanup({ () => partestLockFile.delete }),
+
     lockPartestFile := {
-      val partestLockFile = "." + File.separator + "tests" + File.separator + "partest.lock"
-      partestLock = new RandomAccessFile(partestLockFile, "rw").getChannel.tryLock
+      // When this file is present, running `test` generates the files for
+      // partest. Otherwise it just executes the tests directly.
+      val lockDir = partestLockFile.getParentFile
+      lockDir.mkdirs
+      // Cannot have concurrent partests as they write to the same directory.
+      if (lockDir.list.size > 0)
+        throw new RuntimeException("ERROR: sbt partest: another partest is already running, pid in lock file: " + lockDir.list.toList.mkString(" "))
+      partestLockFile.createNewFile
+      partestLockFile.deleteOnExit
     },
-    runPartestRunner <<= runTask(Test, "dotty.partest.DPConsoleRunner", "") dependsOn (test in Test),
+    runPartestRunner <<= Def.inputTaskDyn {
+      // Magic! This is both an input task and a dynamic task. Apparently
+      // command line arguments get passed to the last task in an aliased
+      // sequence (see partest alias below), so this works.
+      val args = Def.spaceDelimited("<arg>").parsed
+      val jars = Seq((packageBin in Compile).value.getAbsolutePath) ++
+          getJarPaths(partestDeps.value, ivyPaths.value.ivyHome)
+      val dottyJars  = "-dottyJars " + jars.length + " " + jars.mkString(" ")
+      // Provide the jars required on the classpath of run tests
+      runTask(Test, "dotty.partest.DPConsoleRunner", dottyJars + " " + args.mkString(" "))
+    },
 
     // Adjust classpath for running dotty
     mainClass in (Compile, run) := Some("dotty.tools.dotc.Main"),
@@ -68,31 +94,32 @@ object DottyBuild extends Build {
 
     // http://grokbase.com/t/gg/simple-build-tool/135ke5y90p/sbt-setting-jvm-boot-paramaters-for-scala
     javaOptions <++= (managedClasspath in Runtime, packageBin in Compile) map { (attList, bin) =>
-       // put the Scala {library, reflect} in the classpath
-       val path = for {
-         file <- attList.map(_.data)
-         path = file.getAbsolutePath
-       } yield "-Xbootclasspath/p:" + path
-       // dotty itself needs to be in the bootclasspath
-       val fullpath = ("-Xbootclasspath/a:" + bin) :: path.toList
-       // System.err.println("BOOTPATH: " + fullpath)
+      // put the Scala {library, reflect} in the classpath
+      val path = for {
+        file <- attList.map(_.data)
+        path = file.getAbsolutePath
+      } yield "-Xbootclasspath/p:" + path
+      // dotty itself needs to be in the bootclasspath
+      val fullpath = ("-Xbootclasspath/a:" + bin) :: path.toList
+      // System.err.println("BOOTPATH: " + fullpath)
 
-       val travis_build = // propagate if this is a travis build
-         if (sys.props.isDefinedAt(TRAVIS_BUILD))
-           List(s"-D$TRAVIS_BUILD=${sys.props(TRAVIS_BUILD)}")
-         else
-           List()
-
-       val tuning =
-         if (sys.props.isDefinedAt("Oshort"))
-           // Optimize for short-running applications, see https://github.com/lampepfl/dotty/issues/222
-           List("-XX:+TieredCompilation", "-XX:TieredStopAtLevel=1")
+      val travis_build = // propagate if this is a travis build
+        if (sys.props.isDefinedAt(TRAVIS_BUILD))
+          List(s"-D$TRAVIS_BUILD=${sys.props(TRAVIS_BUILD)}") ::: travisMemLimit
         else
           List()
 
-      tuning ::: agentOptions ::: travis_build ::: fullpath
+      val tuning =
+        if (sys.props.isDefinedAt("Oshort"))
+          // Optimize for short-running applications, see https://github.com/lampepfl/dotty/issues/222
+          List("-XX:+TieredCompilation", "-XX:TieredStopAtLevel=1")
+        else
+          List()
+
+      ("-DpartestParentID=" + pid) :: tuning ::: agentOptions ::: travis_build ::: fullpath
     }
-  ) ++ addCommandAlias("partest", ";lockPartestFile;runPartestRunner")
+  ) ++ addCommandAlias("partest", ";test:package;package;lockPartestFile;test:test;runPartestRunner") ++
+       addCommandAlias("partest-only", ";test:package;package;lockPartestFile;test:test-only dotc.tests;runPartestRunner")
 
   lazy val dotty = Project(id = "dotty", base = file("."), settings = defaults)
 
@@ -143,7 +170,23 @@ object DottyBuild extends Build {
   lazy val benchmarks = Project(id = "dotty-bench", settings = benchmarkSettings,
     base = file("bench")) dependsOn(dotty % "compile->test")
 
-  lazy val lockPartestFile = TaskKey[Unit]("lockPartestFile", "Creates the file lock on  ./tests/partest.lock")
-  lazy val runPartestRunner = TaskKey[Unit]("runPartestRunner", "Runs partests")
+  // Partest tasks
+  lazy val lockPartestFile = TaskKey[Unit]("lockPartestFile", "Creates the lock file at ./tests/locks/partest-<pid>.lock")
+  lazy val partestLockFile = new File("." + File.separator + "tests" + File.separator + "locks" + File.separator + s"partest-$pid.lock")
+  def pid = java.lang.Long.parseLong(java.lang.management.ManagementFactory.getRuntimeMXBean().getName().split("@")(0))
 
+  lazy val runPartestRunner = InputKey[Unit]("runPartestRunner", "Runs partest")
+
+  lazy val partestDeps = SettingKey[Seq[ModuleID]]("partestDeps", "Finds jars for partest dependencies")
+  def getJarPaths(modules: Seq[ModuleID], ivyHome: Option[File]): Seq[String] = ivyHome match {
+    case Some(home) =>
+      modules.map({ module =>
+        val file = Path(home) / Path("cache") /
+          Path(module.organization) / Path(module.name) / Path("jars") /
+          Path(module.name + "-" + module.revision + ".jar")
+        if (!file.isFile) throw new RuntimeException("ERROR: sbt getJarPaths: dependency jar not found: " + file)
+        else file.jfile.getAbsolutePath
+      })
+    case None => throw new RuntimeException("ERROR: sbt getJarPaths: ivyHome not defined")
+  }
 }

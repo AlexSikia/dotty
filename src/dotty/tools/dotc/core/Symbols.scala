@@ -109,6 +109,30 @@ trait Symbols { this: Context =>
         ClassInfo(owner.thisType, _, parents, decls, selfInfo),
         privateWithin, coord, assocFile)
 
+  /** Same as `newCompleteClassSymbol` except that `parents` can be a list of arbitrary
+   *  types which get normalized into type refs and parameter bindings.
+   */
+  def newNormalizedClassSymbol(
+      owner: Symbol,
+      name: TypeName,
+      flags: FlagSet,
+      parentTypes: List[Type],
+      decls: Scope = newScope,
+      selfInfo: Type = NoType,
+      privateWithin: Symbol = NoSymbol,
+      coord: Coord = NoCoord,
+      assocFile: AbstractFile = null): ClassSymbol = {
+    def completer = new LazyType {
+      def complete(denot: SymDenotation)(implicit ctx: Context): Unit = {
+        val cls = denot.asClass.classSymbol
+        val decls = newScope
+        val parentRefs: List[TypeRef] = normalizeToClassRefs(parentTypes, cls, decls)
+        denot.info = ClassInfo(owner.thisType, cls, parentRefs, decls)
+      }
+    }
+    newClassSymbol(owner, name, flags, completer, privateWithin, coord, assocFile)
+  }
+
   /** Create a module symbol with associated module class
    *  from its non-info fields and a function producing the info
    *  of the module class (this info may be lazy).
@@ -228,8 +252,8 @@ trait Symbols { this: Context =>
     newSymbol(cls, nme.localDummyName(cls), EmptyFlags, NoType)
 
   /** Create an import symbol pointing back to given qualifier `expr`. */
-  def newImportSymbol(expr: Tree, coord: Coord = NoCoord) =
-    newSymbol(NoSymbol, nme.IMPORT, EmptyFlags, ImportType(expr), coord = coord)
+  def newImportSymbol(owner: Symbol, expr: Tree, coord: Coord = NoCoord) =
+    newSymbol(owner, nme.IMPORT, EmptyFlags, ImportType(expr), coord = coord)
 
   /** Create a class constructor symbol for given class `cls`. */
   def newConstructor(cls: ClassSymbol, flags: FlagSet, paramNames: List[TermName], paramTypes: List[Type], privateWithin: Symbol = NoSymbol, coord: Coord = NoCoord) =
@@ -325,6 +349,12 @@ trait Symbols { this: Context =>
   def requiredClass(path: PreName): ClassSymbol =
     base.staticRef(path.toTypeName).requiredSymbol(_.isClass).asClass
 
+  /** Get ClassSymbol if class is either defined in current compilation run
+   *  or present on classpath.
+   *  Returns NoSymbol otherwise. */
+  def getClassIfDefined(path: PreName): Symbol =
+    base.staticRef(path.toTypeName, generateStubs = false).requiredSymbol(_.isClass, generateStubs = false)
+
   def requiredModule(path: PreName): TermSymbol =
     base.staticRef(path.toTermName).requiredSymbol(_ is Module).asTerm
 
@@ -378,8 +408,12 @@ object Symbols {
     }
 
     /** Subclass tests and casts */
-    final def isTerm(implicit ctx: Context): Boolean = denot.isTerm
-    final def isType(implicit ctx: Context): Boolean = denot.isType
+    final def isTerm(implicit ctx: Context): Boolean =
+      (if(isDefinedInCurrentRun) lastDenot else denot).isTerm
+    
+    final def isType(implicit ctx: Context): Boolean =
+      (if(isDefinedInCurrentRun) lastDenot else denot).isType
+
     final def isClass: Boolean = isInstanceOf[ClassSymbol]
 
     final def asTerm(implicit ctx: Context): TermSymbol = { assert(isTerm, s"asTerm called on not-a-Term $this" ); asInstanceOf[TermSymbol] }
@@ -429,14 +463,6 @@ object Symbols {
 
     /** If this symbol satisfies predicate `p` this symbol, otherwise `NoSymbol` */
     def filter(p: Symbol => Boolean): Symbol = if (p(this)) this else NoSymbol
-
-    /** Is this symbol a user-defined value class? */
-    final def isDerivedValueClass(implicit ctx: Context): Boolean = {
-      this.derivesFrom(defn.AnyValClass)(ctx.withPhase(denot.validFor.firstPhaseId))
-        // Simulate ValueClasses.isDerivedValueClass
-      false  // will migrate to ValueClasses.isDerivedValueClass;
-               // unsupported value class code will continue to use this stub while it exists
-    }
 
     /** The current name of this symbol */
     final def name(implicit ctx: Context): ThisName = denot.name.asInstanceOf[ThisName]
@@ -554,13 +580,17 @@ object Symbols {
         ctx.newSymbol(owner, name, flags, info, privateWithin, coord)
   }
 
-  implicit def defn(implicit ctx: Context): Definitions = ctx.definitions
-
   /** Makes all denotation operations available on symbols */
   implicit def toDenot(sym: Symbol)(implicit ctx: Context): SymDenotation = sym.denot
 
   /** Makes all class denotations available on class symbols */
   implicit def toClassDenot(cls: ClassSymbol)(implicit ctx: Context): ClassDenotation = cls.classDenot
+
+  /** The Definitions object */
+  def defn(implicit ctx: Context): Definitions = ctx.definitions
+
+  /** The current class */
+  def currentClass(implicit ctx: Context): ClassSymbol = ctx.owner.enclosingClass.asClass
 
   var stubs: List[Symbol] = Nil // diagnostic
 }

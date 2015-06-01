@@ -33,7 +33,6 @@ import StdNames.nme
 import NameOps._
 
 class DottyBackendInterface()(implicit ctx: Context) extends BackendInterface{
-  trait NonExistentTree extends tpd.Tree
   type Symbol          = Symbols.Symbol
   type Type            = Types.Type
   type Tree            = tpd.Tree
@@ -68,8 +67,8 @@ class DottyBackendInterface()(implicit ctx: Context) extends BackendInterface{
   type Modifiers       = tpd.Modifiers
   type Annotation      = Annotations.Annotation
   type ArrayValue      = tpd.JavaSeqLiteral
-  type ApplyDynamic    = NonExistentTree
-  type ModuleDef       = NonExistentTree
+  type ApplyDynamic    = Null
+  type ModuleDef       = Null
   type LabelDef        = tpd.DefDef
   type Closure         = tpd.Closure
 
@@ -230,7 +229,7 @@ class DottyBackendInterface()(implicit ctx: Context) extends BackendInterface{
 
   private def emitArgument(av:   AnnotationVisitor,
                            name: String,
-                           arg:  Tree, bcodeStore: BCodeHelpers)(innerClasesStore: bcodeStore.BCInnerClassGen) {
+                           arg:  Tree, bcodeStore: BCodeHelpers)(innerClasesStore: bcodeStore.BCInnerClassGen): Unit = {
     (arg: @unchecked) match {
 
       case Literal(const @ Constant(_)) =>
@@ -296,7 +295,8 @@ class DottyBackendInterface()(implicit ctx: Context) extends BackendInterface{
     }
   }
 
-  override def emitAnnotations(cw: asm.ClassVisitor, annotations: List[Annotation], bcodeStore: BCodeHelpers)(innerClasesStore: bcodeStore.BCInnerClassGen) {
+  override def emitAnnotations(cw: asm.ClassVisitor, annotations: List[Annotation], bcodeStore: BCodeHelpers)
+                              (innerClasesStore: bcodeStore.BCInnerClassGen) = {
     for(annot <- annotations; if shouldEmitAnnotation(annot)) {
       val typ = annot.atp
       val assocs = annot.assocs
@@ -305,14 +305,15 @@ class DottyBackendInterface()(implicit ctx: Context) extends BackendInterface{
     }
   }
 
-  private def emitAssocs(av: asm.AnnotationVisitor, assocs: List[(Name, Object)], bcodeStore: BCodeHelpers)(innerClasesStore: bcodeStore.BCInnerClassGen) {
-    for ((name, value) <- assocs) {
-      emitArgument(av, name.toString(), value.asInstanceOf[Tree], bcodeStore)(innerClasesStore)
-    }
+  private def emitAssocs(av: asm.AnnotationVisitor, assocs: List[(Name, Object)], bcodeStore: BCodeHelpers)
+                        (innerClasesStore: bcodeStore.BCInnerClassGen) = {
+    for ((name, value) <- assocs)
+      emitArgument(av, name.toString, value.asInstanceOf[Tree], bcodeStore)(innerClasesStore)
     av.visitEnd()
   }
 
-  override def emitAnnotations(mw: asm.MethodVisitor, annotations: List[Annotation], bcodeStore: BCodeHelpers)(innerClasesStore: bcodeStore.BCInnerClassGen) {
+  override def emitAnnotations(mw: asm.MethodVisitor, annotations: List[Annotation], bcodeStore: BCodeHelpers)
+                              (innerClasesStore: bcodeStore.BCInnerClassGen) = {
     for(annot <- annotations; if shouldEmitAnnotation(annot)) {
       val typ = annot.atp
       val assocs = annot.assocs
@@ -321,7 +322,8 @@ class DottyBackendInterface()(implicit ctx: Context) extends BackendInterface{
     }
   }
 
-  override def emitAnnotations(fw: asm.FieldVisitor, annotations: List[Annotation], bcodeStore: BCodeHelpers)(innerClasesStore: bcodeStore.BCInnerClassGen) {
+  override def emitAnnotations(fw: asm.FieldVisitor, annotations: List[Annotation], bcodeStore: BCodeHelpers)
+                              (innerClasesStore: bcodeStore.BCInnerClassGen) = {
     for(annot <- annotations; if shouldEmitAnnotation(annot)) {
       val typ = annot.atp
       val assocs = annot.assocs
@@ -330,7 +332,8 @@ class DottyBackendInterface()(implicit ctx: Context) extends BackendInterface{
     }
   }
 
-  override def emitParamAnnotations(jmethod: asm.MethodVisitor, pannotss: List[List[Annotation]], bcodeStore: BCodeHelpers)(innerClasesStore: bcodeStore.BCInnerClassGen) {
+  override def emitParamAnnotations(jmethod: asm.MethodVisitor, pannotss: List[List[Annotation]], bcodeStore: BCodeHelpers)
+                                   (innerClasesStore: bcodeStore.BCInnerClassGen): Unit = {
     val annotationss = pannotss map (_ filter shouldEmitAnnotation)
     if (annotationss forall (_.isEmpty)) return
     for ((annots, idx) <- annotationss.zipWithIndex;
@@ -551,7 +554,7 @@ class DottyBackendInterface()(implicit ctx: Context) extends BackendInterface{
     def fullName: String = sym.showFullName
     def simpleName: Name = sym.name
     def javaSimpleName: Name = toDenot(sym).name // addModuleSuffix(simpleName.dropLocal)
-    def javaBinaryName: Name = toDenot(sym).fullNameSeparated('/') // addModuleSuffix(fullNameInternal('/'))
+    def javaBinaryName: Name = toDenot(sym).fullNameSeparated("/") // addModuleSuffix(fullNameInternal('/'))
     def javaClassName: String = toDenot(sym).fullName.toString// addModuleSuffix(fullNameInternal('.')).toString
     def name: Name = sym.name
     def rawname: Name = sym.name // todo ????
@@ -589,7 +592,7 @@ class DottyBackendInterface()(implicit ctx: Context) extends BackendInterface{
     def isDeferred: Boolean = sym is Flags.Deferred
     def isPrivate: Boolean = sym is Flags.Private
     def getsJavaFinalFlag: Boolean =
-      isFinal &&  !toDenot(sym).isClassConstructor && !(sym is Flags.Mutable) &&  !(sym.enclosingClass is Flags.JavaInterface)
+      isFinal &&  !toDenot(sym).isClassConstructor && !(sym is Flags.Mutable) &&  !(sym.enclosingClass is Flags.Trait)
 
     def getsJavaPrivateFlag: Boolean =
       isPrivate //|| (sym.isPrimaryConstructor && sym.owner.isTopLevelModuleClass)
@@ -614,7 +617,7 @@ class DottyBackendInterface()(implicit ctx: Context) extends BackendInterface{
     def hasAnnotation(sym: Symbol): Boolean = false
     def shouldEmitForwarders: Boolean =  //exitingPickler { !(sym.name.toString contains '$')
       (sym is Flags.Module) && !(sym is Flags.ImplClass) /// !sym.isNestedClass
-    def isJavaEntryPoint: Boolean = CollectEntryPoints.isJavaEntyPoint(sym)
+    def isJavaEntryPoint: Boolean = CollectEntryPoints.isJavaEntryPoint(sym)
 
     def isClassConstructor: Boolean = toDenot(sym).isClassConstructor
 
@@ -647,7 +650,7 @@ class DottyBackendInterface()(implicit ctx: Context) extends BackendInterface{
     }
     def parentSymbols: List[Symbol] = toDenot(sym).info.parents.map(_.typeSymbol)
     def superClass: Symbol =  {
-      val t = toDenot(sym).superClass
+      val t = toDenot(sym).asClass.superClass
       if (t.exists) t
       else if (sym is Flags.ModuleClass) {
         // workaround #371
@@ -678,8 +681,24 @@ class DottyBackendInterface()(implicit ctx: Context) extends BackendInterface{
 
     // members
     def primaryConstructor: Symbol = toDenot(sym).primaryConstructor
-    def nestedClasses: List[Symbol] = memberClasses //exitingPhase(currentRun.lambdaliftPhase)(sym.memberClasses)
-    def memberClasses: List[Symbol] = toDenot(sym).info.memberClasses.map(_.symbol).toList
+
+    /** For currently compiled classes: All locally defined classes including local classes.
+     *  The empty list for classes that are not currently compiled.
+     */
+    def nestedClasses: List[Symbol] = definedClasses(ctx.flattenPhase)
+
+    /** For currently compiled classes: All classes that are declared as members of this class
+     *  (but not inherited ones). The empty list for classes that are not currently compiled.
+     */
+    def memberClasses: List[Symbol] = definedClasses(ctx.lambdaLiftPhase)
+
+    private def definedClasses(phase: Phase) =
+      if (sym.isDefinedInCurrentRun)
+        ctx.atPhase(phase) { implicit ctx =>
+          toDenot(sym).info.decls.filter(_.isClass).toList
+        }
+      else Nil
+
     def annotations: List[Annotation] = Nil
     def companionModuleMembers: List[Symbol] =  {
       // phase travel to exitingPickler: this makes sure that memberClassesOf only sees member classes,
@@ -712,7 +731,7 @@ class DottyBackendInterface()(implicit ctx: Context) extends BackendInterface{
      * All interfaces implemented by a class, except for those inherited through the superclass.
      *
      */
-    def superInterfaces: List[Symbol] = decorateSymbol(sym).superInterfaces
+    def superInterfaces: List[Symbol] = decorateSymbol(sym).directlyInheritedTraits
 
     /**
      * True for module classes of package level objects. The backend will generate a mirror class for
@@ -733,6 +752,9 @@ class DottyBackendInterface()(implicit ctx: Context) extends BackendInterface{
 
 
     def addRemoteRemoteExceptionAnnotation: Unit = ()
+
+    def samMethod(): Symbol =
+      toDenot(sym).info.abstractTermMembers.headOption.getOrElse(toDenot(sym).info.member(nme.apply)).symbol
   }
 
 
@@ -778,7 +800,8 @@ class DottyBackendInterface()(implicit ctx: Context) extends BackendInterface{
       def primitiveOrClassToBType(sym: Symbol): BType = {
         assert(sym.isClass, sym)
         assert(sym != ArrayClass || isCompilingArray, sym)
-        primitiveTypeMap.getOrElse(sym, storage.getClassBTypeAndRegisterInnerClass(sym.asInstanceOf[ct.int.Symbol]))
+        primitiveTypeMap.getOrElse(sym.asInstanceOf[ct.bTypes.coreBTypes.bTypes.int.Symbol],
+          storage.getClassBTypeAndRegisterInnerClass(sym.asInstanceOf[ct.int.Symbol])).asInstanceOf[BType]
       }
 
       /**
@@ -787,7 +810,7 @@ class DottyBackendInterface()(implicit ctx: Context) extends BackendInterface{
        */
       def nonClassTypeRefToBType(sym: Symbol): ClassBType = {
         assert(sym.isType && isCompilingArray, sym)
-        ObjectReference
+        ObjectReference.asInstanceOf[ct.bTypes.ClassBType]
       }
 
       tp.widenDealias match {
@@ -832,7 +855,7 @@ class DottyBackendInterface()(implicit ctx: Context) extends BackendInterface{
               "If possible, please file a bug on issues.scala-lang.org.")
 
           tp match {
-            case ThisType(ArrayClass)               => ObjectReference // was introduced in 9b17332f11 to fix SI-999, but this code is not reached in its test, or any other test
+            case ThisType(ArrayClass)               => ObjectReference.asInstanceOf[ct.bTypes.ClassBType] // was introduced in 9b17332f11 to fix SI-999, but this code is not reached in its test, or any other test
             case ThisType(sym)                      => storage.getClassBTypeAndRegisterInnerClass(sym.asInstanceOf[ct.int.Symbol])
            // case t: SingletonType                 => primitiveOrClassToBType(t.classSymbol)
             case t: SingletonType                  => t.underlying.toTypeKind(ct)(storage)

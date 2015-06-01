@@ -10,6 +10,7 @@ import reporting.Reporter
 import transform.TreeChecker
 import java.io.{BufferedWriter, OutputStreamWriter}
 import scala.reflect.io.VirtualFile
+import scala.util.control.NonFatal
 
 class Run(comp: Compiler)(implicit ctx: Context) {
 
@@ -27,42 +28,48 @@ class Run(comp: Compiler)(implicit ctx: Context) {
     }
   }
 
-  def compile(fileNames: List[String]): Unit = {
+  def compile(fileNames: List[String]): Unit = try {
     val sources = fileNames map getSource
     compileSources(sources)
+  } catch {
+    case NonFatal(ex) =>
+      println(i"exception occurred while compiling $units%, %")
+      throw ex
   }
 
-  /** TODO: There's a fundamental design problem here: We assmble phases using `squash`
+  /** TODO: There's a fundamental design problem here: We assemble phases using `squash`
    *  when we first build the compiler. But we modify them with -Yskip, -Ystop
-   *  on each run. That modification needs to either trasnform the tree structure,
-   *  or we need to assmeble phases on each run, and take -Yskip, -Ystop into
+   *  on each run. That modification needs to either transform the tree structure,
+   *  or we need to assemble phases on each run, and take -Yskip, -Ystop into
    *  account. I think the latter would be preferable.
    */
-  def compileSources(sources: List[SourceFile]) = Stats.monitorHeartBeat {
+  def compileSources(sources: List[SourceFile]) =
     if (sources forall (_.exists)) {
-      val phases = ctx.squashPhases(ctx.phasePlan,
-        ctx.settings.Yskip.value, ctx.settings.YstopBefore.value, ctx.settings.YstopAfter.value, ctx.settings.Ycheck.value)
-      ctx.usePhases(phases)
       units = sources map (new CompilationUnit(_))
-      for (phase <- ctx.allPhases)
-        if (!ctx.reporter.hasErrors) {
-          if (ctx.settings.verbose.value) println(s"[$phase]")
-          units = phase.runOn(units)
-          def foreachUnit(op: Context => Unit)(implicit ctx: Context): Unit =
-            for (unit <- units) op(ctx.fresh.setPhase(phase.next).setCompilationUnit(unit))
-          if (ctx.settings.Xprint.value.containsPhase(phase))
-            foreachUnit(printTree)
-
-        }
+      compileUnits()
     }
+
+  protected def compileUnits() = Stats.monitorHeartBeat {
+    val phases = ctx.squashPhases(ctx.phasePlan,
+      ctx.settings.Yskip.value, ctx.settings.YstopBefore.value, ctx.settings.YstopAfter.value, ctx.settings.Ycheck.value)
+    ctx.usePhases(phases)
+    for (phase <- ctx.allPhases)
+      if (!ctx.reporter.hasErrors) {
+        if (ctx.settings.verbose.value) println(s"[$phase]")
+        units = phase.runOn(units)
+        def foreachUnit(op: Context => Unit)(implicit ctx: Context): Unit =
+          for (unit <- units) op(ctx.fresh.setPhase(phase.next).setCompilationUnit(unit))
+        if (ctx.settings.Xprint.value.containsPhase(phase))
+          foreachUnit(printTree)
+      }
   }
 
   private def printTree(ctx: Context) = {
     val unit = ctx.compilationUnit
     val prevPhase = ctx.phase.prev // can be a mini-phase
-    val squahsedPhase = ctx.squashed(prevPhase)
+    val squashedPhase = ctx.squashed(prevPhase)
 
-    println(s"result of $unit after ${squahsedPhase}:")
+    println(s"result of $unit after ${squashedPhase}:")
     println(unit.tpdTree.show(ctx))
   }
 

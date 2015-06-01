@@ -6,6 +6,7 @@ import Types._
 import Contexts._
 import Symbols._
 import Decorators._
+import TypeUtils._
 import StdNames.nme
 import NameOps._
 import ast._
@@ -51,6 +52,7 @@ import ast.Trees._
 trait FullParameterization {
 
   import tpd._
+  import FullParameterization._
 
   /** If references to original symbol `referenced` from within fully parameterized method
    *  `derived` should be rewired to some fully parameterized method, the rewiring target symbol,
@@ -107,35 +109,21 @@ trait FullParameterization {
       tp.substDealias(ctparams, classParamsRange map (PolyParam(pt, _)))
     }
 
-    /** The bounds for the added type paraneters of the polytype `pt` */
+    /** The bounds for the added type parameters of the polytype `pt` */
     def mappedClassBounds(pt: PolyType): List[TypeBounds] =
       ctparams.map(tparam => mapClassParams(tparam.info, pt).bounds)
 
     info match {
       case info @ PolyType(mtnames) =>
         PolyType(mtnames ++ ctnames)(
-          pt => (info.paramBounds ++ mappedClassBounds(pt))
-            .mapConserve(_.subst(info, pt).bounds),
+          pt =>
+            (info.paramBounds.map(mapClassParams(_, pt).bounds) ++
+             mappedClassBounds(pt)).mapConserve(_.subst(info, pt).bounds),
           pt => resultType(mapClassParams(_, pt)).subst(info, pt))
       case _ =>
         if (ctparams.isEmpty) resultType(identity)
         else PolyType(ctnames)(mappedClassBounds, pt => resultType(mapClassParams(_, pt)))
     }
-  }
-
-  /** Assuming `info` is a result of a `fullyParameterizedType` call, the signature of the
-   *  original method type `X` such that `info = fullyParameterizedType(X, ...)`.
-   */
-  def memberSignature(info: Type)(implicit ctx: Context): Signature = info match {
-    case info: PolyType => memberSignature(info.resultType)
-    case info @ MethodType(nme.SELF :: Nil, _) =>
-      val normalizedResultType = info.resultType match {
-        case rtp: MethodType => rtp
-        case rtp => ExprType(rtp)
-      }
-      normalizedResultType.signature
-    case _ =>
-      Signature.NotAMethod
   }
 
   /** The type parameters (skolems) of the method definition `originalDef`,
@@ -234,4 +222,15 @@ trait FullParameterization {
       .appliedTo(This(originalDef.symbol.enclosingClass.asClass))
       .appliedToArgss(originalDef.vparamss.nestedMap(vparam => ref(vparam.symbol)))
       .withPos(originalDef.rhs.pos)
+}
+
+object FullParameterization {
+  /** Assuming `info` is a result of a `fullyParameterizedType` call, the signature of the
+   *  original method type `X` such that `info = fullyParameterizedType(X, ...)`.
+   */
+  def memberSignature(info: Type)(implicit ctx: Context): Signature = info match {
+    case info: PolyType => memberSignature(info.resultType)
+    case info @ MethodType(nme.SELF :: Nil, _) => info.resultType.ensureMethodic.signature
+    case _ => Signature.NotAMethod
+  }
 }

@@ -13,8 +13,6 @@ import dotty.tools.dotc.transform.SymUtils._
  *  @param  typeMap  A function from Type to Type that gets applied to the
  *                   type of every tree node and to all locally defined symbols,
  *                   followed by the substitution [substFrom := substTo].
- *  @param ownerMap  A function that translates owners of top-level local symbols
- *                   defined in the mapped tree.
  *  @param treeMap   A transformer that translates all encountered subtrees in
  *                   prefix traversal orders
  *  @param oldOwners Previous owners. If a top-level local symbol in the mapped tree
@@ -27,7 +25,7 @@ import dotty.tools.dotc.transform.SymUtils._
  *  The reason the substitution is broken out from the rest of the type map is
  *  that all symbols have to be substituted at the same time. If we do not do this,
  *  we risk data races on named types. Example: Say we have `outer#1.inner#2` and we
- *  have two substitutons S1 = [outer#1 := outer#3], S2 = [inner#2 := inner#4] where
+ *  have two substitutions S1 = [outer#1 := outer#3], S2 = [inner#2 := inner#4] where
  *  hashtags precede symbol ids. If we do S1 first, we get outer#2.inner#3. If we then
  *  do S2 we get outer#2.inner#4. But that means that the named type outer#2.inner
  *  gets two different denotations in the same period. Hence, if -Yno-double-bindings is

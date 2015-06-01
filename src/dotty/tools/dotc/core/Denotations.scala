@@ -2,7 +2,7 @@ package dotty.tools
 package dotc
 package core
 
-import SymDenotations.{ SymDenotation, ClassDenotation, NoDenotation }
+import SymDenotations.{ SymDenotation, ClassDenotation, NoDenotation, NotDefinedHereDenotation }
 import Contexts.{Context, ContextBase}
 import Names.{Name, PreName}
 import Names.TypeName
@@ -128,7 +128,17 @@ object Denotations {
      */
     def atSignature(sig: Signature, site: Type = NoPrefix)(implicit ctx: Context): SingleDenotation
 
-    /** The variant of this denotation that's current in the given context. */
+    /** The variant of this denotation that's current in the given context, or
+     *  `NotDefinedHereDenotation` if this denotation does not exist at current phase, but
+     *  is defined elsewhere in this run.
+     */
+    def currentIfExists(implicit ctx: Context): Denotation
+
+    /** The variant of this denotation that's current in the given context.
+     *  If no such denotation exists: If Mode.FutureDefs is set, the
+     *  denotation with each alternative at its first point of definition,
+     *  otherwise a `NotDefinedHere` exception is thrown.
+     */
     def current(implicit ctx: Context): Denotation
 
     /** Is this denotation different from NoDenotation or an ErrorDenotation? */
@@ -177,13 +187,15 @@ object Denotations {
     }
 
     /** Return symbol in this denotation that satisfies the given predicate.
-     *  Return a stubsymbol if denotation is a missing ref.
+     *  if generateStubs is specified, return a stubsymbol if denotation is a missing ref.
      *  Throw a `TypeError` if predicate fails to disambiguate symbol or no alternative matches.
      */
-    def requiredSymbol(p: Symbol => Boolean, source: AbstractFile = null)(implicit ctx: Context): Symbol =
+    def requiredSymbol(p: Symbol => Boolean, source: AbstractFile = null, generateStubs: Boolean = true)(implicit ctx: Context): Symbol =
       disambiguate(p) match {
         case MissingRef(ownerd, name) =>
-          ctx.newStubSymbol(ownerd.symbol, name, source)
+          if (generateStubs)
+            ctx.newStubSymbol(ownerd.symbol, name, source)
+          else NoSymbol
         case NoDenotation | _: NoQualifyingRef =>
           throw new TypeError(s"None of the alternatives of $this satisfies required predicate")
         case denot =>
@@ -347,6 +359,8 @@ object Denotations {
     final def signature(implicit ctx: Context) = Signature.OverloadedSignature
     def atSignature(sig: Signature, site: Type)(implicit ctx: Context): SingleDenotation =
       denot1.atSignature(sig, site) orElse denot2.atSignature(sig, site)
+    def currentIfExists(implicit ctx: Context): Denotation =
+      derivedMultiDenotation(denot1.currentIfExists, denot2.currentIfExists)
     def current(implicit ctx: Context): Denotation =
       derivedMultiDenotation(denot1.current, denot2.current)
     def altsWith(p: Symbol => Boolean): List[SingleDenotation] =
@@ -528,7 +542,7 @@ object Denotations {
      *  is brought forward to be valid in the new runId. Otherwise
      *  the symbol is stale, which constitutes an internal error.
      */
-    def current(implicit ctx: Context): SingleDenotation = {
+    def currentIfExists(implicit ctx: Context): SingleDenotation = {
       val currentPeriod = ctx.period
       val valid = myValidFor
       if (valid.code <= 0) {
@@ -569,7 +583,7 @@ object Denotations {
               else {
                 next match {
                   case next: ClassDenotation =>
-                    assert(!next.is(Package), s"illegal transfomation of package denotation by transformer ${ctx.withPhase(transformer).phase}")
+                    assert(!next.is(Package), s"illegal transformation of package denotation by transformer ${ctx.withPhase(transformer).phase}")
                     next.resetFlag(Frozen)
                   case _ =>
                 }
@@ -591,16 +605,23 @@ object Denotations {
             //println(s"searching: $cur at $currentPeriod, valid for ${cur.validFor}")
             cur = cur.nextInRun
             cnt += 1
-            if (cnt > MaxPossiblePhaseId)
-              if (ctx.mode is Mode.FutureDefsOK)
-                return current(ctx.withPhase(coveredInterval.firstPhaseId))
-              else
-                throw new NotDefinedHere(demandOutsideDefinedMsg)
+            if (cnt > MaxPossiblePhaseId) return NotDefinedHereDenotation
           }
           cur
         }
       }
     }
+
+    def current(implicit ctx: Context): SingleDenotation = {
+      val d = currentIfExists
+      if (d ne NotDefinedHereDenotation) d else currentNoDefinedHere
+    }
+
+    private def currentNoDefinedHere(implicit ctx: Context): SingleDenotation =
+      if (ctx.mode is Mode.FutureDefsOK)
+        current(ctx.withPhase(coveredInterval.firstPhaseId))
+      else
+        throw new NotDefinedHere(demandOutsideDefinedMsg)
 
     private def demandOutsideDefinedMsg(implicit ctx: Context): String =
       s"demanding denotation of $this at phase ${ctx.phase}(${ctx.phaseId}) outside defined interval: defined periods are${definedPeriodsString}"
@@ -618,14 +639,9 @@ object Denotations {
         // println(s"installing $this after $phase/${phase.id}, valid = ${current.validFor}")
         // printPeriods(current)
         this.validFor = Period(ctx.runId, targetId, current.validFor.lastPhaseId)
-        if (current.validFor.firstPhaseId == targetId) {
-          // replace current with this denotation
-          var prev = current
-          while (prev.nextInRun ne current) prev = prev.nextInRun
-          prev.nextInRun = this
-          this.nextInRun = current.nextInRun
-          current.validFor = Nowhere
-        } else {
+        if (current.validFor.firstPhaseId == targetId)
+          replaceDenotation(current)
+        else {
           // insert this denotation after current
           current.validFor = Period(ctx.runId, current.validFor.firstPhaseId, targetId - 1)
           this.nextInRun = current.nextInRun
@@ -633,6 +649,33 @@ object Denotations {
         }
       // printPeriods(this)
       }
+    }
+
+    /** Apply a transformation `f` to all denotations in this group that start at or after
+     *  given phase. Denotations are replaced while keeping the same validity periods.
+     */
+    protected def transformAfter(phase: DenotTransformer, f: SymDenotation => SymDenotation)(implicit ctx: Context): Unit = {
+      var current = symbol.current
+      while (current.validFor.firstPhaseId < phase.id && (current.nextInRun.validFor.code > current.validFor.code))
+        current = current.nextInRun
+      var hasNext = true
+      while ((current.validFor.firstPhaseId >= phase.id) && hasNext) {
+        val current1: SingleDenotation = f(current.asSymDenotation)
+        if (current1 ne current) {
+          current1.validFor = current.validFor
+          current1.replaceDenotation(current)
+        }
+        hasNext = current1.nextInRun.validFor.code > current1.validFor.code
+        current = current1.nextInRun
+      }
+    }
+
+    private def replaceDenotation(current: SingleDenotation): Unit = {
+      var prev = current
+      while (prev.nextInRun ne current) prev = prev.nextInRun
+      prev.nextInRun = this
+      this.nextInRun = current.nextInRun
+      current.validFor = Nowhere
     }
 
     def staleSymbolError(implicit ctx: Context) = {
@@ -874,8 +917,9 @@ object Denotations {
 
     /** The current denotation of the static reference given by path,
      *  or a MissingRef or NoQualifyingRef instance, if it does not exist.
+     *  if generateStubs is set, generates stubs for missing top-level symbols
      */
-    def staticRef(path: Name)(implicit ctx: Context): Denotation = {
+    def staticRef(path: Name, generateStubs: Boolean = true)(implicit ctx: Context): Denotation = {
       def recur(path: Name, len: Int): Denotation = {
         val point = path.lastIndexOf('.', len - 1)
         val owner =
@@ -887,7 +931,9 @@ object Denotations {
           val result = owner.info.member(name)
           if (result ne NoDenotation) result
           else {
-            val alt = missingHook(owner.symbol.moduleClass, name)
+            val alt =
+              if (generateStubs) missingHook(owner.symbol.moduleClass, name)
+              else NoSymbol
             if (alt.exists) alt.denot
             else MissingRef(owner, name)
           }

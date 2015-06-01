@@ -6,9 +6,9 @@ import Contexts._
 import Periods._
 import Symbols._
 import Scopes._
-import typer.{FrontEnd, Typer, Mode, ImportInfo, RefChecks, InstChecks}
+import typer.{FrontEnd, Typer, Mode, ImportInfo, RefChecks}
 import reporting.ConsoleReporter
-import dotty.tools.dotc.core.Phases.Phase
+import Phases.Phase
 import dotty.tools.dotc.transform._
 import dotty.tools.dotc.transform.TreeTransforms.{TreeTransform, TreeTransformer}
 import dotty.tools.dotc.core.DenotTransformers.DenotTransformer
@@ -38,37 +38,46 @@ class Compiler {
   def phases: List[List[Phase]] =
     List(
       List(new FrontEnd),
-      List(new InstChecks),
-      List(new FirstTransform,
-           new SyntheticMethods),
-      List(new SuperAccessors),
-      List(new Pickler), // Pickler needs to come last in a group since it should not pickle trees generated later
+      List(new PostTyper),
+      List(new Pickler),
+      List(new FirstTransform),
       List(new PreSpecializer,
+           new RefChecks,
            new RefChecks,
            new ElimRepeated,
            new NormalizeFlags,
            new ExtensionMethods,
+           new ExpandSAMs,
            new TailRec),
       List(new PatternMatcher,
            new ExplicitOuter,
            new Splitter),
       List(new TypeSpecializer),
-      List(new LazyVals,
-           new SeqLiterals,
+      List(new SeqLiterals,
            new InterceptedMethods,
            new Literalize,
            new Getters,
+           new ClassTags,
            new ElimByName,
            new ResolveSuper),
       List(new Erasure),
-      List(new Mixin,
+      List(new ElimErasedValueType,
+           new VCInline,
+           new Mixin,
+           new LazyVals,
            new Memoize,
-           new CapturedVars,
-           new Constructors),
-      List(new LambdaLift,
+           new CapturedVars, // capturedVars has a transformUnit: no phases should introduce local mutable vars here
+           new Constructors,
+           new FunctionalInterfaces),
+      List(new LambdaLift,   // in this mini-phase block scopes are incorrect. No phases that rely on scopes should be here
            new Flatten,
            new RestoreScopes),
-      List(/*new PrivateToStatic,*/ new CollectEntryPoints, new LabelDefs, new ElimWildcardIdents, new TraitConstructors),
+      List(/*new PrivateToStatic,*/
+           new ExpandPrivate,
+           new CollectEntryPoints,
+           new LabelDefs,
+           new ElimWildcardIdents,
+           new TraitConstructors),
       List(new GenBCode)
     )
 
@@ -99,14 +108,18 @@ class Compiler {
       .setMode(Mode.ImplicitsEnabled)
       .setTyperState(new MutableTyperState(ctx.typerState, new ConsoleReporter()(ctx), isCommittable = true))
     ctx.definitions.init(start) // set context of definitions to start
-    def addImport(ctx: Context, sym: Symbol) =
-      ctx.fresh.setImportInfo(ImportInfo.rootImport(sym)(ctx))
-    (start.setRunInfo(new RunInfo(start)) /: defn.RootImports)(addImport)
+    def addImport(ctx: Context, symf: () => Symbol) =
+      ctx.fresh.setImportInfo(ImportInfo.rootImport(symf)(ctx))
+    (start.setRunInfo(new RunInfo(start)) /: defn.RootImportFns)(addImport)
+  }
+
+  def reset()(implicit ctx: Context): Unit = {
+    ctx.base.reset()
+    ctx.runInfo.clear()
   }
 
   def newRun(implicit ctx: Context): Run = {
-    ctx.base.reset()
-    ctx.runInfo.clear()
+    reset()
     new Run(this)(rootContext)
   }
 }

@@ -39,6 +39,23 @@ object Checking {
           d"Type argument ${arg.tpe} does not conform to $which bound $bound ${err.whyNoMatchStr(arg.tpe, bound)}",
           arg.pos)
 
+  /** Check that `tp` refers to a nonAbstract class
+   *  and that the instance conforms to the self type of the created class.
+   */
+  def checkInstantiable(tp: Type, pos: Position)(implicit ctx: Context): Unit =
+    tp.underlyingClassRef(refinementOK = false) match {
+      case tref: TypeRef =>
+        val cls = tref.symbol
+        if (cls.is(AbstractOrTrait))
+          ctx.error(d"$cls is abstract; cannot be instantiated", pos)
+        if (!cls.is(Module)) {
+          val selfType = tp.givenSelfType.asSeenFrom(tref.prefix, cls.owner)
+          if (selfType.exists && !(tp <:< selfType))
+            ctx.error(d"$tp does not conform to its self type $selfType; cannot be instantiated")
+        }
+      case _ =>
+    }
+
   /** A type map which checks that the only cycles in a type are F-bounds
    *  and that protects all F-bounded references by LazyRefs.
    */
@@ -47,7 +64,7 @@ object Checking {
     /** Are cycles allowed within nested refinedInfos of currently checked type? */
     private var nestedCycleOK = false
 
-    /** Are cycles allwoed within currently checked type? */
+    /** Are cycles allowed within currently checked type? */
     private var cycleOK = false
 
     /** A diagnostic output string that indicates the position of the last
@@ -295,8 +312,8 @@ trait Checking {
           def doubleDefError(decl: Symbol, other: Symbol): Unit = {
             def ofType = if (decl.isType) "" else d": ${other.info}"
             def explanation =
-              if (!decl.isSourceMethod) ""
-              else "\n (both definitions have the same erased type signature)"
+              if (!decl.isRealMethod) ""
+              else "\n (the definitions have matching type signatures)"
             ctx.error(d"$decl is already defined as $other$ofType$explanation", decl.pos)
           }
           if (decl is Synthetic) doubleDefError(other, decl)

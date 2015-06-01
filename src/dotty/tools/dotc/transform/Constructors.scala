@@ -32,12 +32,23 @@ class Constructors extends MiniPhaseTransform with SymTransformer { thisTransfor
   override def phaseName: String = "constructors"
   override def runsAfter: Set[Class[_ <: Phase]] = Set(classOf[Erasure])
 
+
+  /** All initializers should be moved into constructor
+    */
+  override def checkPostCondition(tree: tpd.Tree)(implicit ctx: Context): Unit = {
+    tree match {
+      case t: ValDef if ((t.rhs ne EmptyTree) && !(t.symbol is Flags.Lazy) && t.symbol.owner.isClass) =>
+        assert(false, i"$t initializers should be moved to constructors")
+      case _ =>
+    }
+  }
+
   /** Symbols that are owned by either <local dummy> or a class field move into the
    *  primary constructor.
    */
   override def transformSym(sym: SymDenotation)(implicit ctx: Context): SymDenotation = {
     def ownerBecomesConstructor(owner: Symbol): Boolean =
-      (owner.isLocalDummy || owner.isTerm && !owner.is(Method | Lazy)) &&
+      (owner.isLocalDummy || owner.isTerm && !owner.is(MethodOrLazy)) &&
       owner.owner.isClass
     if (ownerBecomesConstructor(sym.owner))
       sym.copySymDenotation(owner = sym.owner.enclosingClass.primaryConstructor)
@@ -54,9 +65,8 @@ class Constructors extends MiniPhaseTransform with SymTransformer { thisTransfor
    *  constructor.
    */
   private def mightBeDropped(sym: Symbol)(implicit ctx: Context) =
-    sym.is(Private, butNot = KeeperFlags) && !sym.is(MutableParamAccessor)
+    sym.is(Private, butNot = MethodOrLazy) && !sym.is(MutableParamAccessor)
 
-  private final val KeeperFlags = Method | Lazy | NotJavaPrivate
   private final val MutableParamAccessor = allOf(Mutable, ParamAccessor)
 
   override def transformTemplate(tree: Template)(implicit ctx: Context, info: TransformerInfo): Tree = {
@@ -80,11 +90,10 @@ class Constructors extends MiniPhaseTransform with SymTransformer { thisTransfor
     //  (2) If the parameter accessor reference was to an alias getter,
     //      drop the () when replacing by the parameter.
     object intoConstr extends TreeMap {
-      private var excluded: FlagSet = _
       override def transform(tree: Tree)(implicit ctx: Context): Tree = tree match {
         case Ident(_) | Select(This(_), _) =>
           var sym = tree.symbol
-          if (sym is (ParamAccessor, butNot = excluded)) sym = sym.subst(accessors, paramSyms)
+          if (sym is (ParamAccessor, butNot = Mutable)) sym = sym.subst(accessors, paramSyms)
           if (sym.owner.isConstructor) ref(sym).withPos(tree.pos) else tree
         case Apply(fn, Nil) =>
           val fn1 = transform(fn)
@@ -95,9 +104,8 @@ class Constructors extends MiniPhaseTransform with SymTransformer { thisTransfor
           if (noDirectRefsFrom(tree)) tree else super.transform(tree)
       }
 
-      def apply(tree: Tree, inSuperCall: Boolean = false)(implicit ctx: Context): Tree = {
-        this.excluded = if (inSuperCall) EmptyFlags else Mutable
-        transform(tree)
+      def apply(tree: Tree, prevOwner: Symbol)(implicit ctx: Context): Tree = {
+        transform(tree).changeOwnerAfter(prevOwner, constr.symbol, thisTransform)
       }
     }
 
@@ -153,19 +161,19 @@ class Constructors extends MiniPhaseTransform with SymTransformer { thisTransfor
             val sym = stat.symbol
             if (isRetained(sym)) {
               if (!stat.rhs.isEmpty && !isWildcardArg(stat.rhs))
-                constrStats += Assign(ref(sym), intoConstr(stat.rhs)).withPos(stat.pos)
+                constrStats += Assign(ref(sym), intoConstr(stat.rhs, sym)).withPos(stat.pos)
               clsStats += cpy.ValDef(stat)(rhs = EmptyTree)
             }
             else if (!stat.rhs.isEmpty) {
               sym.copySymDenotation(
                 initFlags = sym.flags &~ Private,
                 owner = constr.symbol).installAfter(thisTransform)
-              constrStats += intoConstr(stat)
+              constrStats += intoConstr(stat, sym)
             }
           case _: DefTree =>
             clsStats += stat
           case _ =>
-            constrStats += intoConstr(stat)
+            constrStats += intoConstr(stat, tree.symbol)
         }
         splitStats(stats1)
       case Nil =>

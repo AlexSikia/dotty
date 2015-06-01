@@ -24,11 +24,8 @@ class tests extends CompilerTest {
       "-Ycheck:tailrec,resolveSuper,mixin,restoreScopes",
       "-d", defaultOutputDir
   )
-  val doEmitBytecode = List("-Ystop-before:terminal")
-  val failedbyName = List("-Ystop-before:collectEntryPoints") // #288
   val testPickling = List("-Xprint-types", "-Ytest-pickler", "-Ystop-after:pickler")
 
-  val failedOther = List("-Ystop-before:collectEntryPoints") // some non-obvious reason. need to look deeper
   val twice = List("#runs", "2")
   val staleSymbolError: List[String] = List()
 
@@ -39,27 +36,30 @@ class tests extends CompilerTest {
   val specialise = List("-Yspecialize:all")
 
   val testsDir      = "./tests/"
-  val posDir        = testsDir + "pos/"  
+  val posDir        = testsDir + "pos/"
   val posSpecialDir = testsDir + "pos-special/"
   val negDir        = testsDir + "neg/"
+  val runDir        = testsDir + "run/"
   val newDir        = testsDir + "new/"
   val specialDir    = posDir   + "specialization/"
   val miniMethodDir = testsDir + "method_minibox/"
   val miniMoreDir   = testsDir + "more_minibox/"
 
-  val dottyDir = "./src/dotty/"
-  val toolsDir = dottyDir + "tools/"
-  val dotcDir  = toolsDir + "dotc/"
-  val coreDir  = dotcDir + "core/"
+  val sourceDir = "./src/"
+  val dottyDir  = sourceDir + "dotty/"
+  val toolsDir  = dottyDir + "tools/"
+  val dotcDir   = toolsDir + "dotc/"
+  val coreDir   = dotcDir + "core/"
 
 /*
 
   @Test def pickle_pickleOK = compileDir(testsDir, "pickling", testPickling)
-  @Test def pickle_pickling = compileDir(coreDir, "pickling", testPickling)
+// This directory doesn't exist anymore
+// @Test def pickle_pickling = compileDir(coreDir, "pickling", testPickling)
   @Test def pickle_ast = compileDir(dotcDir, "ast", testPickling)
 
   //@Test def pickle_core = compileDir(dotcDir, "core", testPickling, xerrors = 2) // two spurious comparison errors in Types and TypeOps
-  
+
   @Test def pos_t2168_pat = compileFile(posDir, "t2168", twice)
   @Test def pos_erasure = compileFile(posDir, "erasure", twice)
   @Test def pos_Coder() = compileFile(posDir, "Coder", twice)
@@ -88,6 +88,7 @@ class tests extends CompilerTest {
   @Test def pos_overloadedAccess = compileFile(posDir, "overloadedAccess", twice)
   @Test def pos_approximateUnion = compileFile(posDir, "approximateUnion", twice)
   @Test def pos_tailcall = compileDir(posDir, "tailcall", twice)
+  @Test def pos_valueclasses = compileFiles(posDir + "valueclasses/", twice)
   @Test def pos_nullarify = compileFile(posDir, "nullarify", args = "-Ycheck:nullarify" :: Nil)
   @Test def pos_subtyping = compileFile(posDir, "subtyping", twice)
   @Test def pos_t2613 = compileFile(posSpecialDir, "t2613")(allowDeepSubtypes)
@@ -98,11 +99,7 @@ class tests extends CompilerTest {
 
   @Test def pos_all = compileFiles(posDir) // twice omitted to make tests run faster
 
-
-  @Test def pos_SI7638 = compileFile(posDir, "SI-7638")
-  @Test def pos_SI7638a = compileFile(posDir, "SI-7638a")
-
-  //@Test def new_all = compileFiles(newDir, twice)
+  @Test def new_all = compileFiles(newDir, twice)
 
   @Test def neg_blockescapes() = compileFile(negDir, "blockescapesNeg", xerrors = 1)
   @Test def neg_typedapply() = compileFile(negDir, "typedapply", xerrors = 4)
@@ -122,8 +119,6 @@ class tests extends CompilerTest {
   @Test def neg_i50_volatile = compileFile(negDir, "i50-volatile", xerrors = 6)
   @Test def neg_t0273_doubledefs = compileFile(negDir, "t0273", xerrors = 1)
   @Test def neg_zoo = compileFile(negDir, "zoo", xerrors = 12)
-  // TODO: this test file doesn't exist (anymore?), remove?
-  // @Test def neg_t1192_legalPrefix = compileFile(negDir, "t1192", xerrors = 1)
 
   val negTailcallDir = negDir + "tailcall/"
   @Test def neg_tailcall_t1672b = compileFile(negTailcallDir, "t1672b", xerrors = 6)
@@ -132,7 +127,7 @@ class tests extends CompilerTest {
   @Test def neg_tailcall = compileFile(negTailcallDir, "tailrec", xerrors = 7)
   @Test def neg_tailcall2 = compileFile(negTailcallDir, "tailrec-2", xerrors = 2)
   @Test def neg_tailcall3 = compileFile(negTailcallDir, "tailrec-3", xerrors = 2)
-  
+
   @Test def neg_t1279a = compileFile(negDir, "t1279a", xerrors = 1)
   @Test def neg_t1843_variances = compileFile(negDir, "t1843-variances", xerrors = 1)
   @Test def neg_t2660_ambi = compileFile(negDir, "t2660", xerrors = 2)
@@ -152,23 +147,21 @@ class tests extends CompilerTest {
   @Test def neg_escapingRefs = compileFile(negDir, "escapingRefs", xerrors = 2)
   @Test def neg_instantiateAbstract = compileFile(negDir, "instantiateAbstract", xerrors = 8)
   @Test def neg_selfInheritance = compileFile(negDir, "selfInheritance", xerrors = 5)
+  */
 
-  @Test def dotc = compileDir(toolsDir, "dotc", failedOther)(allowDeepSubtypes ++ twice) // see dotc_core
-  @Test def dotc_ast = compileDir(dotcDir, "ast", failedOther ++ twice)
-    //similar to dotc_core_pickling but for another anon class. Still during firstTransform
+  //@Test def run_all = runFiles(runDir)
+  @Test def run_spec = runFile(runDir, "specialization")
+
+/*
+  @Test def dotty = compileDir(dottyDir, "tools", "-deep" :: allowDeepSubtypes ++ twice) // note the -deep argument
+
+
+  @Test def dotc_ast = compileDir(dotcDir, "ast")
   @Test def dotc_config = compileDir(dotcDir, "config")
-  @Test def dotc_core = compileDir(dotcDir, "core", failedOther)("-Yno-double-bindings" :: allowDeepSubtypes)// twice omitted to make tests run faster
-    // error: error while loading ConstraintHandling$$anon$1$,
-    // class file 'target/scala-2.11/dotty_2.11-0.1-SNAPSHOT.jar(dotty/tools/dotc/core/ConstraintHandling$$anon$1.class)'
-    // has location not matching its contents: contains class $anon
+  @Test def dotc_core = compileDir(dotcDir, "core")("-Yno-double-bindings" :: allowDeepSubtypes)// twice omitted to make tests run faster
 
-  @Test def dotc_core_pickling = compileDir(coreDir, "pickling", failedOther)(allowDeepSubtypes)// twice omitted to make tests run faster
-    // exception caught when loading class ClassfileParser$$anon$1: dotty.tools.dotc.core.Denotations$NotDefinedHere:
-    // demanding denotation of module class ClassfileParser$$anon$1$ at phase frontend(1) outside defined interval:
-    // defined periods are Period(31..36, run = 2) Period(3..24, run = 2) Period(25..26, run = 2)
-    // Period(27..28, run = 2) Period(29..29, run = 2) Period(30..30, run = 2)
-    // inside FirstTransform    at dotty.tools.dotc.transform.FirstTransform.transform(FirstTransform.scala:33)
-    // weird.
+// This directory doesn't exist anymore
+//  @Test def dotc_core_pickling = compileDir(coreDir, "pickling")(allowDeepSubtypes)// twice omitted to make tests run faster
 
   @Test def dotc_transform = compileDir(dotcDir, "transform")// twice omitted to make tests run faster
 
@@ -178,19 +171,16 @@ class tests extends CompilerTest {
 
   @Test def dotc_reporting = compileDir(dotcDir, "reporting") // twice omitted to make tests run faster
 
-  @Test def dotc_typer = compileDir(dotcDir, "typer", failedOther)// twice omitted to make tests run faster
+  @Test def dotc_typer = compileDir(dotcDir, "typer")// twice omitted to make tests run faster
     // error: error while loading Checking$$anon$2$,
     // class file 'target/scala-2.11/dotty_2.11-0.1-SNAPSHOT.jar(dotty/tools/dotc/typer/Checking$$anon$2.class)'
     // has location not matching its contents: contains class $anon
 
-  @Test def dotc_util = compileDir(dotcDir, "util", failedOther ++ twice)
-    // java.lang.ClassCastException: dotty.tools.dotc.core.Types$NoType$ cannot be cast to dotty.tools.dotc.core.Types$ClassInfo
-    // at dotty.tools.dotc.core.SymDenotations$ClassDenotation.classInfo(SymDenotations.scala:1026)
-    // at dotty.tools.dotc.transform.ExtensionMethods.transform(ExtensionMethods.scala:38)
+  @Test def dotc_util = compileDir(dotcDir, "util") // twice omitted to make tests run faster
 
-  @Test def tools_io = compileDir(toolsDir, "io", failedOther ++ twice) // inner class has symbol <none>
+  @Test def tools_io = compileDir(toolsDir, "io") // inner class has symbol <none>
 
-  @Test def helloWorld = compileFile(posDir, "HelloWorld", twice)
+  @Test def helloWorld = compileFile(posDir, "HelloWorld")
   @Test def labels = compileFile(posDir, "Labels", twice)
   //@Test def tools = compileDir(dottyDir, "tools", "-deep" :: Nil)(allowDeepSubtypes)
 
@@ -207,7 +197,7 @@ class tests extends CompilerTest {
 
   val javaDir = "./tests/pos/java-interop/"
   @Test def java_all = compileFiles(javaDir, twice)
-*/
+
   @Test def specialization = compileFile(specialDir, "specialization", List("-Xprint:specialize"))
   @Test def mutual_spec = compileFile(specialDir, "mutual_specialization", List("-Xprint:specialize"))
   @Test def return_spec = compileFile(specialDir, "return_specialization", List("-Xprint:specialize"))
@@ -219,11 +209,12 @@ class tests extends CompilerTest {
   @Test def multi_spec = compileFile(specialDir, "multi_specialization", List("-Xprint:specialize"))
   @Test def pos_this_specialization = compileFile(specialDir, "this_specialization", List("-Xprint:specialize"))
   @Test def pos_spec_all = compileFiles(specialDir)
-
+*/
   //@Test def mini_method = compileFiles(miniMethodDir)//, List("-Xprint:all"))
   //@Test def mini_more = compileFiles(miniMoreDir)//, List("-Xprint:all"))
   //@Test def pos_all = compileFiles(posDir)//, List("-Xprint:all"))
 
   //@Test def pos_si7638 = compileFile(posDir, "SI-7638", List("-Xprint:all"))
   //@Test def test = compileFile(posDir, "t247", List("-Xprint:all"))
+  //@Test def dotc_compilercommand = compileFile(dotcDir + "config/", "CompilerCommand")
 }

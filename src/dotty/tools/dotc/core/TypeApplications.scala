@@ -235,13 +235,13 @@ class TypeApplications(val self: Type) extends AnyVal {
     baseArgInfos(base) mapConserve noBounds
 
   /** The type arguments of this type's base type instance wrt.`base`.
-   *  Existential types in arguments are approximanted by their lower bound.
+   *  Existential types in arguments are approximated by their lower bound.
    */
   final def baseArgTypesLo(base: Symbol)(implicit ctx: Context): List[Type] =
     baseArgInfos(base) mapConserve boundsToLo
 
   /** The type arguments of this type's base type instance wrt.`base`.
-   *  Existential types in arguments are approximanted by their upper bound.
+   *  Existential types in arguments are approximated by their upper bound.
    */
   final def baseArgTypesHi(base: Symbol)(implicit ctx: Context): List[Type] =
     baseArgInfos(base) mapConserve boundsToHi
@@ -279,15 +279,20 @@ class TypeApplications(val self: Type) extends AnyVal {
         default
     }
   }
-  
+
   /** Translate a type of the form From[T] to To[T], keep other types as they are.
    *  `from` and `to` must be static classes, both with one type parameter, and the same variance.
+   *  Do the same for by name types => From[T] and => To[T]
    */
-  def translateParameterized(from: ClassSymbol, to: ClassSymbol)(implicit ctx: Context): Type =
-    if (self.derivesFrom(from))
-      if (ctx.erasedTypes) to.typeRef
-      else RefinedType(to.typeRef, to.typeParams.head.name, self.member(from.typeParams.head.name).info)
-    else self
+  def translateParameterized(from: ClassSymbol, to: ClassSymbol)(implicit ctx: Context): Type = self match {
+    case self @ ExprType(tp) =>
+      self.derivedExprType(tp.translateParameterized(from, to))
+    case _ =>
+      if (self.derivesFrom(from))
+        if (ctx.erasedTypes) to.typeRef
+        else RefinedType(to.typeRef, to.typeParams.head.name, self.member(from.typeParams.head.name).info)
+      else self
+  }
 
   /** If this is repeated parameter type, its underlying Seq type,
    *  or, if isJava is true, Array type, else the type itself.
@@ -510,17 +515,19 @@ class TypeApplications(val self: Type) extends AnyVal {
     self.appliedTo(tparams map (_.typeRef)).LambdaAbstract(tparams)
   }
 
-  /** Test whether this type has a base type `B[T1, ..., Tn]` where the type parameters
-   *  of `B` match one-by-one the variances of `tparams`, and where the lambda
-   *  abstracted type
+  /** Test whether this type has a base type of the form `B[T1, ..., Bn]` where
+   *  the type parameters of `B` match one-by-one the variances of `tparams`,
+   *  and where the lambda abstracted type
    *
    *     LambdaXYZ { type Apply = B[$hkArg$0, ..., $hkArg$n] }
    *               { type $hkArg$0 = T1; ...; type $hkArg$n = Tn }
    *
    *  satisfies predicate `p`. Try base types in the order of their occurrence in `baseClasses`.
    *  A type parameter matches a variance V if it has V as its variance or if V == 0.
+   *  @param classBounds  A hint to bound the search. Only types that derive from one of the
+   *                      classes in classBounds are considered.
    */
-  def testLifted(tparams: List[Symbol], p: Type => Boolean)(implicit ctx: Context): Boolean = {
+  def testLifted(tparams: List[Symbol], p: Type => Boolean, classBounds: List[ClassSymbol])(implicit ctx: Context): Boolean = {
     def tryLift(bcs: List[ClassSymbol]): Boolean = bcs match {
       case bc :: bcs1 =>
         val tp = self.baseTypeWithArgs(bc)
@@ -528,7 +535,8 @@ class TypeApplications(val self: Type) extends AnyVal {
         val tycon = tp.withoutArgs(targs)
         def variancesMatch(param1: Symbol, param2: Symbol) =
           param2.variance == param2.variance || param2.variance == 0
-        if ((tycon.typeParams corresponds tparams)(variancesMatch)) {
+        if (classBounds.exists(tycon.derivesFrom(_)) &&
+            tycon.typeParams.corresponds(tparams)(variancesMatch)) {
           val expanded = tycon.EtaExpand
           val lifted = (expanded /: targs) { (partialInst, targ) =>
             val tparam = partialInst.typeParams.head
@@ -543,7 +551,7 @@ class TypeApplications(val self: Type) extends AnyVal {
         false
     }
     if (tparams.isEmpty) false
-    else if (typeParams.nonEmpty) p(EtaExpand) || tryLift(self.baseClasses)
-    else tryLift(self.baseClasses)
+    else if (typeParams.nonEmpty) p(EtaExpand) || classBounds.nonEmpty && tryLift(self.baseClasses)
+    else classBounds.nonEmpty && tryLift(self.baseClasses)
   }
 }

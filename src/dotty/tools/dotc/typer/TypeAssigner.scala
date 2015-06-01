@@ -135,7 +135,7 @@ trait TypeAssigner {
         val name = tpe.name
         val d = tpe.denot.accessibleFrom(pre, superAccess)
         if (!d.exists) {
-          // it could be that we found an inaccessbile private member, but there is
+          // it could be that we found an inaccessible private member, but there is
           // an inherited non-private member with the same name and signature.
           val d2 = pre.nonPrivateMember(name)
           if (reallyExists(d2) && firstTry)
@@ -210,7 +210,13 @@ trait TypeAssigner {
       case p.arrayApply => MethodType(defn.IntType :: Nil, arrayElemType)
       case p.arrayUpdate => MethodType(defn.IntType :: arrayElemType :: Nil, defn.UnitType)
       case p.arrayLength => MethodType(Nil, defn.IntType)
-      case nme.clone_ if qualType.isInstanceOf[JavaArrayType] => MethodType(Nil, qualType)
+
+      // Note that we do not need to handle calls to Array[T]#clone() specially:
+      // The JLS section 10.7 says "The return type of the clone method of an array type
+      // T[] is T[]", but the actual return type at the bytecode level is Object which
+      // is casted to T[] by javac. Since the return type of Array[T]#clone() is Array[T],
+      // this is exactly what Erasure will do.
+
       case _ => accessibleSelectionType(tree, qual)
     }
     tree.withType(tp)

@@ -27,7 +27,7 @@ trait TreeInfo[T >: Untyped <: Type] { self: Trees.Instance[T] =>
   /** Does tree contain an initialization part when seen as a member of a class or trait?
    */
   def isNoInitMember(tree: Tree): Boolean = unsplice(tree) match {
-    case EmptyTree | Import(_, _) | TypeDef(_, _) => true
+    case EmptyTree | Import(_, _) | TypeDef(_, _) | DefDef(_, _, _, _, _) => true
     case tree: ValDef => tree.unforcedRhs == EmptyTree
     case _ => false
   }
@@ -160,11 +160,12 @@ trait TreeInfo[T >: Untyped <: Type] { self: Trees.Instance[T] =>
     case _                                => Nil
   }
 
-  /** Is tpt a vararg type of the form T* ? */
-  def isRepeatedParamType(tpt: Tree)(implicit ctx: Context) = tpt match {
+  /** Is tpt a vararg type of the form T* or => T*? */
+  def isRepeatedParamType(tpt: Tree)(implicit ctx: Context): Boolean = tpt match {
+    case ByNameTypeTree(tpt1) => isRepeatedParamType(tpt1)
     case tpt: TypeTree => tpt.typeOpt.isRepeatedParam
-    case AppliedTypeTree(Select(_, tpnme.REPEATED_PARAM_CLASS), _)      => true
-    case _                                                              => false
+    case AppliedTypeTree(Select(_, tpnme.REPEATED_PARAM_CLASS), _) => true
+    case _ => false
   }
 
   /** Is name a left-associative operator? */
@@ -255,7 +256,7 @@ trait TreeInfo[T >: Untyped <: Type] { self: Trees.Instance[T] =>
     case y          => y
   }
 
-  /** Checks whether predicate `p` is true for all result parts of this epression,
+  /** Checks whether predicate `p` is true for all result parts of this expression,
    *  where we zoom into Ifs, Matches, and Blocks.
    */
   def forallResults(tree: Tree, p: Tree => Boolean): Boolean = tree match {
@@ -459,6 +460,34 @@ trait TypedTreeInfo extends TreeInfo[Type] { self: Trees.Instance[Type] =>
       }
     }
     accum(Nil, root)
+  }
+
+
+  /** The top level classes in this tree, including only those module classes that
+   *  are not a linked class of some other class in the result.
+   */
+  def topLevelClasses(tree: Tree)(implicit ctx: Context): List[ClassSymbol] = tree match {
+    case PackageDef(_, stats) => stats.flatMap(topLevelClasses)
+    case tdef: TypeDef if tdef.symbol.isClass => tdef.symbol.asClass :: Nil
+    case _ => Nil
+  }
+
+  /** The tree containing only the top-level classes and objects matching either `cls` or its companion object */
+  def sliceTopLevel(tree: Tree, cls: ClassSymbol)(implicit ctx: Context): List[Tree] = tree match {
+    case PackageDef(pid, stats) =>
+      cpy.PackageDef(tree)(pid, stats.flatMap(sliceTopLevel(_, cls))) :: Nil
+    case tdef: TypeDef =>
+      val sym = tdef.symbol
+      assert(sym.isClass)
+      if (cls == sym || cls == sym.linkedClass) tdef :: Nil
+      else Nil
+    case vdef: ValDef =>
+      val sym = vdef.symbol
+      assert(sym is Module)
+      if (cls == sym.companionClass || cls == sym.moduleClass) vdef :: Nil
+      else Nil
+    case tree =>
+      tree :: Nil
   }
 
   /** The statement sequence that contains a definition of `sym`, or Nil

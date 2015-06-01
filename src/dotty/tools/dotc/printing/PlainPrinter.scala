@@ -8,10 +8,11 @@ import StdNames.nme
 import ast.Trees._, ast._
 import java.lang.Integer.toOctalString
 import config.Config.summarizeDepth
+import typer.Mode
 import scala.annotation.switch
 
 class PlainPrinter(_ctx: Context) extends Printer {
-  protected[this] implicit def ctx: Context = _ctx
+  protected[this] implicit def ctx: Context = _ctx.fresh.addMode(Mode.Printing)
 
   protected def maxToTextRecursions = 100
 
@@ -40,9 +41,14 @@ class PlainPrinter(_ctx: Context) extends Printer {
   def homogenize(tp: Type): Type =
     if (homogenizedView)
       tp match {
-        case tp: TypeVar if tp.isInstantiated => homogenize(tp.instanceOpt)
-        case AndType(tp1, tp2) => homogenize(tp1) & homogenize(tp2)
-        case OrType(tp1, tp2) => homogenize(tp1) | homogenize(tp2)
+        case tp: ThisType if tp.cls.is(Package) && !tp.cls.isEffectiveRoot =>
+          ctx.requiredPackage(tp.cls.fullName).termRef
+        case tp: TypeVar if tp.isInstantiated =>
+          homogenize(tp.instanceOpt)
+        case AndType(tp1, tp2) =>
+          homogenize(tp1) & homogenize(tp2)
+        case OrType(tp1, tp2) =>
+          homogenize(tp1) | homogenize(tp2)
         case _ =>
           val tp1 = tp.simplifyApply
           if (tp1 eq tp) tp else homogenize(tp1)
@@ -109,7 +115,7 @@ class PlainPrinter(_ctx: Context) extends Printer {
     homogenize(tp) match {
       case tp: TypeType =>
         toTextRHS(tp)
-      case tp: TermRef if !tp.denotationIsCurrent || tp.symbol.is(Module) =>
+      case tp: TermRef if !tp.denotationIsCurrent || tp.symbol.is(Module) || tp.symbol.name.isImportName =>
         toTextRef(tp) ~ ".type"
       case tp: TermRef if tp.denot.isOverloaded =>
         "<overloaded " ~ toTextRef(tp) ~ ">"
@@ -164,6 +170,8 @@ class PlainPrinter(_ctx: Context) extends Printer {
             else TypeBounds.empty
           "(" ~ toText(tp.origin) ~ "?" ~ toText(bounds) ~ ")"
         }
+      case tp: LazyRef =>
+        "LazyRef(" ~ toTextGlobal(tp.ref) ~ ")"
       case _ =>
         tp.fallbackToText(this)
     }
@@ -230,10 +238,10 @@ class PlainPrinter(_ctx: Context) extends Printer {
 
   /** The string representation of this type used as a prefix */
   protected def toTextPrefix(tp: Type): Text = controlled {
-    tp match {
+    homogenize(tp) match {
       case NoPrefix => ""
       case tp: SingletonType => toTextRef(tp) ~ "."
-      case _ => trimPrefix(toTextLocal(tp)) ~ "#"
+      case tp => trimPrefix(toTextLocal(tp)) ~ "#"
     }
   }
 
@@ -253,7 +261,7 @@ class PlainPrinter(_ctx: Context) extends Printer {
 
   /** String representation of a definition's type following its name */
   protected def toTextRHS(tp: Type): Text = controlled {
-    tp match {
+    homogenize(tp) match {
       case tp @ TypeBounds(lo, hi) =>
         if (lo eq hi) {
         val eql =
@@ -280,7 +288,7 @@ class PlainPrinter(_ctx: Context) extends Printer {
           else dclsText(trueDecls)
         tparamsText ~ " extends " ~ toTextParents(tp.parents) ~ "{" ~ selfText ~ declsText ~
           "} at " ~ preText
-      case _ =>
+      case tp =>
         ": " ~ toTextGlobal(tp)
     }
   }
@@ -385,7 +393,7 @@ class PlainPrinter(_ctx: Context) extends Printer {
 
   def toText(const: Constant): Text = const.tag match {
     case StringTag => "\"" + escapedString(const.value.toString) + "\""
-    case ClazzTag => "classOf[" ~ toText(const.tpe.firstBaseArgInfo(defn.ClassClass)) ~ "]"
+    case ClazzTag => "classOf[" ~ toText(const.typeValue.classSymbol) ~ "]"
     case CharTag => s"'${escapedChar(const.charValue)}'"
     case LongTag => const.longValue.toString + "L"
     case EnumTag => const.symbolValue.name.toString

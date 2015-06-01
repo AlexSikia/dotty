@@ -679,25 +679,29 @@ object Parsers {
 
     def refinedTypeRest(t: Tree): Tree = {
       newLineOptWhenFollowedBy(LBRACE)
-      in.token match {
-        case AT => refinedTypeRest(atPos(t.pos.start) { Annotated(annot(), t) })
-        case LBRACE => refinedTypeRest(atPos(t.pos.start) { RefinedTypeTree(t, refinement()) })
-        case _ => t
-      }
+      if (in.token == LBRACE) refinedTypeRest(atPos(t.pos.start) { RefinedTypeTree(t, refinement()) })
+      else t
     }
 
-    /** WithType ::= SimpleType {`with' SimpleType}    (deprecated)
+    /** WithType ::= AnnotType {`with' AnnotType}    (deprecated)
      */
-    def withType(): Tree = withTypeRest(simpleType())
+    def withType(): Tree = withTypeRest(annotType())
 
-    def withTypeRest(t: Tree): Tree = {
+    def withTypeRest(t: Tree): Tree =
       if (in.token == WITH) {
         deprecationWarning("`with' as a type operator has been deprecated; use `&' instead")
         in.nextToken()
         AndTypeTree(t, withType())
       }
       else t
-    }
+
+    /** AnnotType ::= SimpleType {Annotation}
+     */
+    def annotType(): Tree = annotTypeRest(simpleType())
+
+    def annotTypeRest(t: Tree): Tree =
+      if (in.token == AT) annotTypeRest(atPos(t.pos.start) { Annotated(annot(), t) })
+      else t
 
     /** SimpleType       ::=  SimpleType TypeArgs
      *                     |  SimpleType `#' Id
@@ -754,17 +758,21 @@ object Parsers {
       if (in.token == ARROW) atPos(in.skipToken()) { ByNameTypeTree(argType()) }
       else argType()
 
-    /** ParamType ::= FunArgType | ArgType `*'
+    /** ParamType ::= [`=>'] ParamValueType
      */
     def paramType(): Tree =
-      if (in.token == ARROW) funArgType()
-      else {
-        val t = argType()
-        if (isIdent(nme.raw.STAR)) {
-          in.nextToken()
-          atPos(t.pos.start) { PostfixOp(t, nme.raw.STAR) }
-        } else t
-      }
+      if (in.token == ARROW) atPos(in.skipToken()) { ByNameTypeTree(paramValueType()) }
+      else paramValueType()
+
+    /** ParamValueType ::= Type [`*']
+     */
+    def paramValueType(): Tree = {
+      val t = typ()
+      if (isIdent(nme.raw.STAR)) {
+        in.nextToken()
+        atPos(t.pos.start) { PostfixOp(t, nme.raw.STAR) }
+      } else t
+    }
 
     /** TypeArgs    ::= `[' ArgType {`,' ArgType} `]'
        */
@@ -1421,10 +1429,10 @@ object Parsers {
       else tree1
     }
 
-    /** Annotation        ::=  `@' SimpleType {ArgumentExprs}
+    /** Annotation        ::=  `@' SimpleType {ParArgumentExprs}
      */
     def annot() =
-      adjustStart(accept(AT)) { ensureApplied(argumentExprss(wrapNew(simpleType()))) }
+      adjustStart(accept(AT)) { ensureApplied(parArgumentExprss(wrapNew(simpleType()))) }
 
     def annotations(skipNewLines: Boolean = false): List[Tree] = {
       if (skipNewLines) newLineOptWhenFollowedBy(AT)
@@ -1830,7 +1838,7 @@ object Parsers {
     /** ConstrApp         ::=  SimpleType {ParArgumentExprs}
      */
     val constrApp = () => {
-      val t = simpleType()
+      val t = annotType()
       if (in.token == LPAREN) parArgumentExprss(wrapNew(t))
       else t
     }

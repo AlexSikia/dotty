@@ -4,11 +4,14 @@ package transform
 import core._
 import Contexts.Context
 import Decorators._
-import pickling._
+import tasty._
 import config.Printers.{noPrinter, pickling}
 import java.io.PrintStream
 import Periods._
 import Phases._
+import Symbols._
+import Flags.Module
+import util.SourceFile
 import collection.mutable
 
 /** This phase pickles trees */
@@ -23,28 +26,49 @@ class Pickler extends Phase {
     s.close
   }
 
-  private val beforePickling = new mutable.HashMap[CompilationUnit, String]
+  private val beforePickling = new mutable.HashMap[ClassSymbol, String]
+
+  /** Drop any elements of this list that are linked module classes of other elements in the list */
+  private def dropCompanionModuleClasses(clss: List[ClassSymbol])(implicit ctx: Context): List[ClassSymbol] = {
+    val companionModuleClasses =
+      clss.filterNot(_ is Module).map(_.linkedClass).filterNot(_.isAbsent)
+    clss.filterNot(companionModuleClasses.contains)
+  }
 
   override def run(implicit ctx: Context): Unit = {
     val unit = ctx.compilationUnit
-    val tree = unit.tpdTree
     pickling.println(i"unpickling in run ${ctx.runId}")
-    if (ctx.settings.YtestPickler.value) beforePickling(unit) = tree.show
 
-    val pickler = unit.pickler
-    val treePkl = new TreePickler(pickler)
-    treePkl.pickle(tree :: Nil)
-    unit.addrOfTree = treePkl.buf.addrOfTree
-    unit.addrOfSym = treePkl.addrOfSym
-    if (tree.pos.exists)
-      new PositionPickler(pickler, treePkl.buf.addrOfTree).picklePositions(tree :: Nil, tree.pos)
+    for { cls <- dropCompanionModuleClasses(topLevelClasses(unit.tpdTree))
+          tree <- sliceTopLevel(unit.tpdTree, cls) } {
+      if (ctx.settings.YtestPickler.value) beforePickling(cls) = tree.show
+      val pickler = new TastyPickler()
+      unit.picklers += (cls -> pickler)
+      val treePkl = new TreePickler(pickler)
+      treePkl.pickle(tree :: Nil)
+      pickler.addrOfTree = treePkl.buf.addrOfTree
+      pickler.addrOfSym = treePkl.addrOfSym
+      if (unit.source.exists)
+        pickleSourcefile(pickler, unit.source)
+      if (tree.pos.exists)
+        new PositionPickler(pickler, treePkl.buf.addrOfTree).picklePositions(tree :: Nil, tree.pos)
 
-    def rawBytes = // not needed right now, but useful to print raw format.
-      unit.pickler.assembleParts().iterator.grouped(10).toList.zipWithIndex.map {
-        case (row, i) => s"${i}0: ${row.mkString(" ")}"
+      def rawBytes = // not needed right now, but useful to print raw format.
+        pickler.assembleParts().iterator.grouped(10).toList.zipWithIndex.map {
+          case (row, i) => s"${i}0: ${row.mkString(" ")}"
+        }
+      // println(i"rawBytes = \n$rawBytes%\n%") // DEBUG
+      if (pickling ne noPrinter) {
+        println(i"**** pickled info of $cls")
+        new TastyPrinter(pickler.assembleParts()).printContents()
       }
-    // println(i"rawBytes = \n$rawBytes%\n%") // DEBUG
-    if (pickling ne noPrinter) new TastyPrinter(pickler.assembleParts()).printContents()
+    }
+  }
+
+  private def pickleSourcefile(pickler: TastyPickler, source: SourceFile): Unit = {
+    val buf = new TastyBuffer(10)
+    pickler.newSection("Sourcefile", buf)
+    buf.writeNat(pickler.nameBuffer.nameIndex(source.file.path).index)
   }
 
   override def runOn(units: List[CompilationUnit])(implicit ctx: Context): List[CompilationUnit] = {
@@ -58,23 +82,23 @@ class Pickler extends Phase {
     pickling.println(i"testing unpickler at run ${ctx.runId}")
     ctx.definitions.init
     val unpicklers =
-      for (unit <- units) yield {
-        val unpickler = new DottyUnpickler(unit.pickler.assembleParts())
+      for (unit <- units; (cls, pickler) <- unit.picklers) yield {
+        val unpickler = new DottyUnpickler(pickler.assembleParts())
         unpickler.enter(roots = Set())
-        unpickler
+        cls -> unpickler
       }
     pickling.println("************* entered toplevel ***********")
-    for ((unpickler, unit) <- unpicklers zip units) {
-      val unpickled = unpickler.body(readPositions = false)
-      testSame(i"$unpickled%\n%", beforePickling(unit), unit)
+    for ((cls, unpickler) <- unpicklers) {
+      val (unpickled, source) = unpickler.body(readPositions = true)
+      testSame(i"$unpickled%\n%", beforePickling(cls), cls, source)
     }
   }
 
-  private def testSame(unpickled: String, previous: String, unit: CompilationUnit)(implicit ctx: Context) =
+  private def testSame(unpickled: String, previous: String, cls: ClassSymbol, source: SourceFile)(implicit ctx: Context) =
     if (previous != unpickled) {
       output("before-pickling.txt", previous)
       output("after-pickling.txt", unpickled)
-      ctx.error(s"""pickling difference for $unit, for details:
+      ctx.error(s"""pickling difference for ${cls.fullName} in $source, for details:
                    |
                    |  diff before-pickling.txt after-pickling.txt""".stripMargin)
     }

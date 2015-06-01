@@ -302,18 +302,19 @@ trait TypeOps { this: Context => // TODO: Make standalone object.
     // println(s"normalizing $parents of $cls in ${cls.owner}") // !!! DEBUG
     var refinements: SimpleMap[TypeName, Type] = SimpleMap.Empty
     var formals: SimpleMap[TypeName, Symbol] = SimpleMap.Empty
-    def normalizeToRef(tp: Type): TypeRef = tp match {
+    def normalizeToRef(tp: Type): TypeRef = tp.dealias match {
+      case tp: TypeRef =>
+        tp
       case tp @ RefinedType(tp1, name: TypeName) =>
         val prevInfo = refinements(name)
         refinements = refinements.updated(name,
             if (prevInfo == null) tp.refinedInfo else prevInfo & tp.refinedInfo)
         formals = formals.updated(name, tp1.typeParamNamed(name))
         normalizeToRef(tp1)
-      case tp: TypeRef =>
-        if (tp.symbol.info.isAlias) normalizeToRef(tp.info.bounds.hi)
-        else tp
       case ErrorType =>
         defn.AnyClass.typeRef
+      case AnnotatedType(_, tpe) =>
+        normalizeToRef(tpe)
       case _ =>
         throw new TypeError(s"unexpected parent type: $tp")
     }
@@ -352,10 +353,11 @@ trait TypeOps { this: Context => // TODO: Make standalone object.
         //println(i"instantiating ${bounds.hi} with $argTypes")
         //println(i" = ${instantiate(bounds.hi, argTypes)}")
         val hiBound = instantiate(bounds.hi, argTypes.mapConserve(_.bounds.hi))
+        val loBound = instantiate(bounds.lo, argTypes.mapConserve(_.bounds.lo))
           // Note that argTypes can contain a TypeBounds type for arguments that are
           // not fully determined. In that case we need to check against the hi bound of the argument.
         if (!(lo <:< hiBound)) violations += ((arg, "upper", hiBound))
-        if (!(bounds.lo <:< hi)) violations += ((arg, "lower", bounds.lo))
+        if (!(loBound <:< hi)) violations += ((arg, "lower", bounds.lo))
       }
       arg.tpe match {
         case TypeBounds(lo, hi) => checkOverlapsBounds(lo, hi)

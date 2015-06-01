@@ -332,7 +332,7 @@ object Flags {
   final val JavaStaticTerm = JavaStatic.toTermFlags
   final val JavaStaticType = JavaStatic.toTypeFlags
 
-  /** Trait is not an interface, but does not have fields or initialization code */
+  /** Trait does not have fields or initialization code */
   final val NoInits = typeFlag(32, "<noInits>")
 
   /** Variable is accessed from nested function. */
@@ -366,9 +366,6 @@ object Flags {
 
   /** Symbol is defined in a super call */
   final val InSuperCall = commonFlag(46, "<in supercall>")
-
-  /** Symbol with private access is accessed outside its private scope */
-  final val NotJavaPrivate = commonFlag(47, "<not-java-private>")
 
   /** Denotation is in train of being loaded and completed, used to catch cyclic dependencies */
   final val Touched = commonFlag(48, "<touched>")

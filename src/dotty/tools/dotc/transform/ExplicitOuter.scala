@@ -13,6 +13,7 @@ import core.Names._
 import core.NameOps._
 import ast.Trees._
 import SymUtils._
+import dotty.tools.dotc.ast.tpd
 import dotty.tools.dotc.core.Phases.Phase
 import util.Attachment
 import collection.mutable
@@ -27,8 +28,8 @@ import collection.mutable
  *
  *   - add outer parameters to constructors
  *   - pass outer arguments in constructor calls
- *   - replace outer this by outer paths.
  *
+ *   replacement of outer this by outer paths is done in Erasure.
  *   needs to run after pattern matcher as it can add outer checks and force creation of $outer
  */
 class ExplicitOuter extends MiniPhaseTransform with InfoTransformer { thisTransformer =>
@@ -101,6 +102,15 @@ class ExplicitOuter extends MiniPhaseTransform with InfoTransformer { thisTransf
       cpy.Template(impl)(parents = parents1, body = impl.body ++ newDefs)
     }
     else impl
+  }
+
+  override def transformClosure(tree: Closure)(implicit ctx: Context, info: TransformerInfo): tpd.Tree = {
+    if (tree.tpt ne EmptyTree) {
+      val cls = tree.tpt.asInstanceOf[TypeTree].tpe.classSymbol
+      if (cls.exists && hasOuter(cls.asClass))
+        ctx.error("Not a single abstract method type, requires an outer pointer", tree.pos)
+    }
+    tree
   }
 }
 
@@ -203,7 +213,7 @@ object ExplicitOuter {
       case id: Ident =>
         id.tpe match {
           case ref @ TermRef(NoPrefix, _) =>
-            ref.symbol.is(Method) && isOuter(id.symbol.owner.enclosingClass)
+            ref.symbol.is(Hoistable) && isOuter(id.symbol.owner.enclosingClass)
             // methods will be placed in enclosing class scope by LambdaLift, so they will get
             // an outer path then.
           case _ => false
@@ -214,6 +224,8 @@ object ExplicitOuter {
        false
     }
   }
+
+  private final val Hoistable = Method | Lazy | Module
 
   /** The outer prefix implied by type `tpe` */
   private def outerPrefix(tpe: Type)(implicit ctx: Context): Type = tpe match {
@@ -245,7 +257,7 @@ object ExplicitOuter {
    *     they cannot be added before erasure.
    *   - outer arguments need access to outer parameters as well as to the
    *     original type prefixes of types in New expressions. These prefixes
-   *     get erased during erasure. Therefore, outer argumenrts have to be passed
+   *     get erased during erasure. Therefore, outer arguments have to be passed
    *     no later than erasure.
    */
   class OuterOps(val ictx: Context) extends AnyVal {

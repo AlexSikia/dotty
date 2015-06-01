@@ -149,8 +149,10 @@ object StdNames {
     final val Seq: N        = "Seq"
     final val Symbol: N     = "Symbol"
     final val ClassTag: N   = "ClassTag"
+    final val classTag: N   = "classTag"
     final val WeakTypeTag: N = "WeakTypeTag"
     final val TypeTag : N   = "TypeTag"
+    final val typeTag: N    = "typeTag"
     final val Expr: N       = "Expr"
     final val String: N     = "String"
     final val Annotation: N = "Annotation"
@@ -170,7 +172,7 @@ object StdNames {
     final val WILDCARD_STAR: N                  = "_*"
     final val REIFY_TREECREATOR_PREFIX: N       = "$treecreator"
     final val REIFY_TYPECREATOR_PREFIX: N       = "$typecreator"
-    final val LAMBDA_ARG_PREFIX: N              = "$hkArg$"
+    final val LAMBDA_ARG_PREFIX: N              = "HK$"
     final val LAMBDA_ARG_PREFIXhead: Char       = LAMBDA_ARG_PREFIX.head
 
     final val Any: N             = "Any"
@@ -215,6 +217,7 @@ object StdNames {
     final val RuntimeParamAnnotationATTR: N = "RuntimeVisibleParameterAnnotations" // RetentionPolicy.RUNTIME (annotations on parameters)
     final val ScalaATTR: N                  = "Scala"
     final val ScalaSignatureATTR: N         = "ScalaSig"
+    final val TASTYATTR: N                  = "TASTY"
     final val SignatureATTR: N              = "Signature"
     final val SourceFileATTR: N             = "SourceFile"
     final val SyntheticATTR: N              = "Synthetic"
@@ -225,6 +228,7 @@ object StdNames {
     val ANYname: N                  = "<anyname>"
     val CONSTRUCTOR: N              = Names.CONSTRUCTOR.toString
     val DEFAULT_CASE: N             = "defaultCase$"
+    val EVT2U: N                    = "evt2u$"
     val EQEQ_LOCAL_VAR: N           = "eqEqTemp$"
     val FAKE_LOCAL_THIS: N          = "this$"
     val IMPLCLASS_CONSTRUCTOR: N    = "$init$"
@@ -256,6 +260,7 @@ object StdNames {
     val SKOLEM: N                   = "<skolem>"
     val SPECIALIZED_INSTANCE: N     = "specInstance$"
     val THIS: N                     = "_$this"
+    val U2EVT: N                    = "u2evt$"
 
     final val Nil: N                = "Nil"
     final val Predef: N             = "Predef"
@@ -415,6 +420,7 @@ object StdNames {
     val isArray: N              = "isArray"
     val isDefined: N            = "isDefined"
     val isDefinedAt: N          = "isDefinedAt"
+    val isDefinedAtImpl: N      = "$isDefinedAt"
     val isEmpty: N              = "isEmpty"
     val isInstanceOf_ : N       = "isInstanceOf"
     val java: N                 = "java"
@@ -538,6 +544,22 @@ object StdNames {
       final val TILDE: N  = "~"
 
       final val isUnary: Set[Name] = Set(MINUS, PLUS, TILDE, BANG)
+    }
+
+    object specializedTypeNames {
+      final val Boolean: N = "Z"
+      final val Byte: N    = "B"
+      final val Char: N    = "C"
+      final val Short: N   = "S"
+      final val Int: N     = "I"
+      final val Long: N    = "J"
+      final val Float: N   = "F"
+      final val Double: N  = "D"
+      final val Void: N    = "V"
+      final val Object: N  = "L"
+
+      final val prefix: N = "$mc"
+      final val suffix: N = "$sp"
     }
 
     // value-conversion methods

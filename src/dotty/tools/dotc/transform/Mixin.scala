@@ -36,7 +36,7 @@ import collection.mutable
  *
  *      <mods> def x_=(y: T) = ()
  *
- *     deferred by maping it to
+ *     deferred by mapping it to
  *
  *      <mods> def x_=(y: T)
  *
@@ -72,7 +72,7 @@ class Mixin extends MiniPhaseTransform with SymTransformer { thisTransform =>
 
   override def transformSym(sym: SymDenotation)(implicit ctx: Context): SymDenotation =
     if (sym.is(Accessor, butNot = Deferred) && sym.owner.is(Trait))
-      sym.copySymDenotation(initFlags = sym.flags | Deferred)
+      sym.copySymDenotation(initFlags = sym.flags | Deferred).ensureNotPrivate
     else
       sym
 
@@ -96,8 +96,10 @@ class Mixin extends MiniPhaseTransform with SymTransformer { thisTransform =>
 
     def traitDefs(stats: List[Tree]): List[Tree] = {
       val initBuf = new mutable.ListBuffer[Tree]
-      stats flatMap {
-        case stat: DefDef if stat.symbol.isGetter && !stat.rhs.isEmpty =>
+      stats.flatMap({
+        case stat: DefDef if stat.symbol.isGetter && !stat.rhs.isEmpty && !stat.symbol.is(Flags.Lazy)  =>
+          // make initializer that has all effects of previous getter,
+          // replace getter rhs with empty tree.
           val vsym = stat.symbol
           val isym = initializer(vsym)
           val rhs = Block(
@@ -112,7 +114,7 @@ class Mixin extends MiniPhaseTransform with SymTransformer { thisTransform =>
         case stat =>
           initBuf += stat
           Nil
-      }
+      }) ++ initBuf
     }
 
     def transformSuper(tree: Tree): Tree = {
@@ -150,7 +152,14 @@ class Mixin extends MiniPhaseTransform with SymTransformer { thisTransform =>
     def traitInits(mixin: ClassSymbol): List[Tree] =
       for (getter <- mixin.info.decls.filter(getr => getr.isGetter && !wasDeferred(getr)).toList)
         yield {
-        DefDef(implementation(getter.asTerm), superRef(initializer(getter)).appliedToNone)
+        // transformFollowing call is needed to make memoize & lazy vals run
+        val rhs = transformFollowing(superRef(initializer(getter)).appliedToNone)
+        // isCurrent: getter is a member of implementing class
+        val isCurrent = getter.is(ExpandedName) || ctx.atPhase(thisTransform) { implicit ctx =>
+          cls.info.member(getter.name).suchThat(_.isGetter).symbol == getter
+        }
+        if (isCurrent) transformFollowing(DefDef(implementation(getter.asTerm), rhs))
+        else rhs
       }
 
     def setters(mixin: ClassSymbol): List[Tree] =
@@ -163,7 +172,7 @@ class Mixin extends MiniPhaseTransform with SymTransformer { thisTransform =>
         if (cls is Trait) traitDefs(impl.body)
         else {
           val mixInits = mixins.flatMap { mixin =>
-            traitInits(mixin) ::: superCallOpt(mixin) ::: setters(mixin)
+            flatten(traitInits(mixin)) ::: superCallOpt(mixin) ::: setters(mixin)
           }
           superCallOpt(superCls) ::: mixInits ::: impl.body
         })

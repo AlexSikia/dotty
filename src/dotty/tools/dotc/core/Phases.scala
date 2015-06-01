@@ -161,9 +161,9 @@ object Phases {
       }
 
       def checkRequirements(p: Phase) = {
-        val unmetPreceedeRequirements = p.runsAfter -- phasesAfter
-        assert(unmetPreceedeRequirements.isEmpty,
-          s"phase ${p} has unmet requirement: ${unmetPreceedeRequirements.mkString(", ")} should precede this phase")
+        val unmetPrecedeRequirements = p.runsAfter -- phasesAfter
+        assert(unmetPrecedeRequirements.isEmpty,
+          s"phase ${p} has unmet requirement: ${unmetPrecedeRequirements.mkString(", ")} should precede this phase")
         phasesAfter += p.getClazz
 
       }
@@ -232,8 +232,10 @@ object Phases {
 
     private val typerCache = new PhaseCache(classOf[FrontEnd])
     private val refChecksCache = new PhaseCache(classOf[RefChecks])
+    private val extensionMethodsCache = new PhaseCache(classOf[ExtensionMethods])
     private val erasureCache = new PhaseCache(classOf[Erasure])
     private val patmatCache = new PhaseCache(classOf[PatternMatcher])
+    private val lambdaLiftCache = new PhaseCache(classOf[LambdaLift])
     private val flattenCache = new PhaseCache(classOf[Flatten])
     private val explicitOuterCache = new PhaseCache(classOf[ExplicitOuter])
     private val gettersCache = new PhaseCache(classOf[Getters])
@@ -242,8 +244,10 @@ object Phases {
 
     def typerPhase = typerCache.phase
     def refchecksPhase = refChecksCache.phase
+    def extensionMethodsPhase = extensionMethodsCache.phase
     def erasurePhase = erasureCache.phase
     def patmatPhase = patmatCache.phase
+    def lambdaLiftPhase = lambdaLiftCache.phase
     def flattenPhase = flattenCache.phase
     def explicitOuterPhase = explicitOuterCache.phase
     def gettersPhase = gettersCache.phase

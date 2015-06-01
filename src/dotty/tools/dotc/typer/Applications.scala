@@ -51,9 +51,12 @@ object Applications {
     sels.takeWhile(_.exists).toList
   }
 
-  def getUnapplySelectors(tp: Type, args:List[untpd.Tree], pos: Position = NoPosition)(implicit ctx: Context): List[Type] =
-    if (defn.isProductSubType(tp) && args.length > 1) productSelectorTypes(tp, pos)
-    else tp :: Nil
+  def getUnapplySelectors(tp: Type, args: List[untpd.Tree], pos: Position = NoPosition)(implicit ctx: Context): List[Type] =
+    if (args.length > 1 && !(tp.derivesFrom(defn.SeqClass))) {
+      val sels = productSelectorTypes(tp, pos)
+      if (sels.length == args.length) sels
+      else tp :: Nil
+    } else tp :: Nil
 
   def unapplyArgs(unapplyResult: Type, unapplyFn:Tree, args:List[untpd.Tree], pos: Position = NoPosition)(implicit ctx: Context): List[Type] = {
 
@@ -90,7 +93,7 @@ trait Applications extends Compatibility { self: Typer =>
   import tpd.{ cpy => _, _ }
   import untpd.cpy
 
-  /** @param Arg        the type of arguments, could be tpd.Tree, untpd.Tree, or Type
+  /** @tparam Arg       the type of arguments, could be tpd.Tree, untpd.Tree, or Type
    *  @param methRef    the reference to the method of the application
    *  @param funType    the type of the function part of the application
    *  @param args       the arguments of the application
@@ -124,6 +127,9 @@ trait Applications extends Compatibility { self: Typer =>
      */
     protected def makeVarArg(n: Int, elemFormal: Type): Unit
 
+    /** If all `args` have primitive numeric types, make sure it's the same one */
+    protected def harmonizeArgs(args: List[TypedArg]): List[TypedArg]
+
     /** Signal failure with given message at position of given argument */
     protected def fail(msg: => String, arg: Arg): Unit
 
@@ -141,7 +147,7 @@ trait Applications extends Compatibility { self: Typer =>
      */
     protected def liftFun(): Unit = ()
 
-    /** A flag signalling that the typechecking the application was so far succesful */
+    /** A flag signalling that the typechecking the application was so far successful */
     private[this] var _ok = true
 
     def ok = _ok
@@ -188,11 +194,11 @@ trait Applications extends Compatibility { self: Typer =>
         else fail(s"$methString does not take parameters")
     }
 
-    /** The application was succesful */
+    /** The application was successful */
     def success = ok
 
     protected def methodType = methType.asInstanceOf[MethodType]
-    private def methString: String = s"method ${methRef.name}: ${methType.show}"
+    private def methString: String = i"${methRef.symbol}: ${methType.show}"
 
     /** Re-order arguments to correctly align named arguments */
     def reorder[T >: Untyped](args: List[Trees.Tree[T]]): List[Trees.Tree[T]] = {
@@ -200,7 +206,7 @@ trait Applications extends Compatibility { self: Typer =>
       /** @param pnames    The list of parameter names that are missing arguments
        *  @param args      The list of arguments that are not yet passed, or that are waiting to be dropped
        *  @param nameToArg A map from as yet unseen names to named arguments
-       *  @param todrop    A set of names that have aready be passed as named arguments
+       *  @param toDrop    A set of names that have already be passed as named arguments
        *
        *  For a well-typed application we have the invariants
        *
@@ -330,8 +336,15 @@ trait Applications extends Compatibility { self: Typer =>
               case arg :: Nil if isVarArg(arg) =>
                 addTyped(arg, formal)
               case _ =>
-                val elemFormal = formal.argTypesLo.head
-                args foreach (addTyped(_, elemFormal))
+                val elemFormal = formal.widenExpr.argTypesLo.head
+                val origConstraint = ctx.typerState.constraint
+                var typedArgs = args.map(typedArg(_, elemFormal))
+                val harmonizedArgs = harmonizeArgs(typedArgs)
+                if (harmonizedArgs ne typedArgs) {
+                  ctx.typerState.constraint = origConstraint
+                  typedArgs = harmonizedArgs
+                }
+                typedArgs.foreach(addArg(_, elemFormal))
                 makeVarArg(args.length, elemFormal)
             }
           else args match {
@@ -386,6 +399,7 @@ trait Applications extends Compatibility { self: Typer =>
     def argType(arg: Tree, formal: Type): Type = normalize(arg.tpe, formal)
     def treeToArg(arg: Tree): Tree = arg
     def isVarArg(arg: Tree): Boolean = tpd.isWildcardStarArg(arg)
+    def harmonizeArgs(args: List[Tree]) = harmonize(args)
   }
 
   /** Subclass of Application for applicability tests with type arguments and value
@@ -402,6 +416,7 @@ trait Applications extends Compatibility { self: Typer =>
     def argType(arg: Type, formal: Type): Type = arg
     def treeToArg(arg: Tree): Type = arg.tpe
     def isVarArg(arg: Type): Boolean = arg.isRepeatedParam
+    def harmonizeArgs(args: List[Type]) = harmonizeTypes(args)
   }
 
   /** Subclass of Application for type checking an Apply node, where
@@ -426,6 +441,8 @@ trait Applications extends Compatibility { self: Typer =>
       val seqLit = if (methodType.isJava) JavaSeqLiteral(args) else SeqLiteral(args)
       typedArgBuf += seqToRepeated(seqLit)
     }
+
+    def harmonizeArgs(args: List[TypedArg]) = harmonize(args)
 
     override def appPos = app.pos
 
@@ -635,7 +652,7 @@ trait Applications extends Compatibility { self: Typer =>
       untpd.EmptyTree
     }
 
-    /** A typed qual.unappy or qual.unappySeq tree, if this typechecks.
+    /** A typed qual.unapply or qual.unapplySeq tree, if this typechecks.
      *  Otherwise fallBack with (maltyped) qual.unapply as argument
      *  Note: requires special handling for overloaded occurrences of
      *  unapply or unapplySeq. We first try to find a non-overloaded
@@ -666,7 +683,7 @@ trait Applications extends Compatibility { self: Typer =>
       }
     }
 
-    /** Produce a typed qual.unappy or qual.unappySeq tree, or
+    /** Produce a typed qual.unapply or qual.unapplySeq tree, or
      *  else if this fails follow a type alias and try again.
      */
     val unapplyFn = trySelectUnapply(qual) { sel =>
@@ -777,7 +794,7 @@ trait Applications extends Compatibility { self: Typer =>
     new ApplicableToTrees(methRef, targs, args, resultType)(nestedContext).success
   }
 
-  /** Is given method reference applicable to type arguments `targs` and argument trees `args` without invfering views?
+  /** Is given method reference applicable to type arguments `targs` and argument trees `args` without inferring views?
     *  @param  resultType   The expected result type of the application
     */
   def isDirectlyApplicable(methRef: TermRef, targs: List[Type], args: List[Tree], resultType: Type)(implicit ctx: Context): Boolean = {
@@ -816,7 +833,7 @@ trait Applications extends Compatibility { self: Typer =>
   }
 
   /** In a set of overloaded applicable alternatives, is `alt1` at least as good as
-   *  `alt2`? `alt1` and `alt2` are nonoverloaded references.
+   *  `alt2`? `alt1` and `alt2` are non-overloaded references.
    */
   def isAsGood(alt1: TermRef, alt2: TermRef)(implicit ctx: Context): Boolean = track("isAsGood") { ctx.traceIndented(i"isAsGood($alt1, $alt2)", overload) {
 
@@ -842,8 +859,14 @@ trait Applications extends Compatibility { self: Typer =>
         val tparams = ctx.newTypeParams(alt1.symbol, tp1.paramNames, EmptyFlags, tp1.instantiateBounds)
         isAsSpecific(alt1, tp1.instantiate(tparams map (_.typeRef)), alt2, tp2)
       case tp1: MethodType =>
-        def repeatedToSingle(tp: Type) = if (tp.isRepeatedParam) tp.argTypesHi.head else tp
-        isApplicable(alt2, tp1.paramTypes map repeatedToSingle, WildcardType) ||
+        def repeatedToSingle(tp: Type): Type = tp match {
+          case tp @ ExprType(tp1) => tp.derivedExprType(repeatedToSingle(tp1))
+          case _ => if (tp.isRepeatedParam) tp.argTypesHi.head else tp
+        }
+        val formals1 =
+          if (tp1.isVarArgsMethod && tp2.isVarArgsMethod) tp1.paramTypes map repeatedToSingle
+          else tp1.paramTypes
+        isApplicable(alt2, formals1, WildcardType) ||
         tp1.paramTypes.isEmpty && tp2.isInstanceOf[MethodOrPoly]
       case _ =>
         tp2 match {
@@ -872,7 +895,7 @@ trait Applications extends Compatibility { self: Typer =>
     def winsOwner2 = isDerived(owner2, owner1)
     def winsType2  = isAsSpecific(alt2, tp2, alt1, tp1)
 
-    implicits.println(i"isAsGood($alt1, $alt2)? $tp1 $tp2 $winsOwner1 $winsType1 $winsOwner2 $winsType2")
+    overload.println(i"isAsGood($alt1, $alt2)? $tp1 $tp2 $winsOwner1 $winsType1 $winsOwner2 $winsType2")
 
     // Assume the following probabilities:
     //
@@ -1007,6 +1030,7 @@ trait Applications extends Compatibility { self: Typer =>
     if (isDetermined(candidates)) candidates
     else narrowMostSpecific(candidates) match {
       case result @ (alt1 :: alt2 :: _) =>
+//        overload.println(i"ambiguous $alt1 $alt2")
         val deepPt = pt.deepenProto
         if (deepPt ne pt) resolveOverloaded(alts, deepPt, targs)
         else result
@@ -1014,6 +1038,41 @@ trait Applications extends Compatibility { self: Typer =>
         result
     }
   }
+
+  private def harmonizeWith[T <: AnyRef](ts: List[T])(tpe: T => Type, adapt: (T, Type) => T)(implicit ctx: Context): List[T] = {
+    def numericClasses(ts: List[T], acc: Set[Symbol]): Set[Symbol] = ts match {
+      case t :: ts1 =>
+        val sym = tpe(t).widen.classSymbol
+        if (sym.isNumericValueClass) numericClasses(ts1, acc + sym)
+        else Set()
+      case Nil =>
+        acc
+    }
+    val clss = numericClasses(ts, Set())
+    if (clss.size > 1) {
+      val lub = defn.ScalaNumericValueClassList.find(lubCls =>
+        clss.forall(defn.isValueSubClass(_, lubCls))).get.typeRef
+      ts.mapConserve(adapt(_, lub))
+    }
+    else ts
+  }
+
+  /** If `trees` all have numeric value types, and they do not have all the same type,
+   *  pick a common numeric supertype and convert all trees to this type.
+   */
+  def harmonize(trees: List[Tree])(implicit ctx: Context): List[Tree] = {
+    def adapt(tree: Tree, pt: Type): Tree = tree match {
+      case cdef: CaseDef => tpd.cpy.CaseDef(cdef)(body = adapt(cdef.body, pt))
+      case _ => adaptInterpolated(tree, pt, tree)
+    }
+    harmonizeWith(trees)(_.tpe, adapt)
+  }
+
+  /** If all `types` are numeric value types, and they are not all the same type,
+   *  pick a common numeric supertype and return it instead of every original type.
+   */
+  def harmonizeTypes(tpes: List[Type])(implicit ctx: Context): List[Type] =
+    harmonizeWith(tpes)(identity, (tp, pt) => pt)
 }
 
 /*

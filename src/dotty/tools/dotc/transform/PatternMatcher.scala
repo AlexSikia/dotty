@@ -21,6 +21,7 @@ import ast.Trees._
 import Applications._
 import TypeApplications._
 import SymUtils._, core.NameOps._
+import typer.Mode
 
 import dotty.tools.dotc.util.Positions.Position
 import dotty.tools.dotc.core.Decorators._
@@ -464,7 +465,9 @@ class PatternMatcher extends MiniPhaseTransform with DenotTransformer {thisTrans
           // all potentially stored subpat binders
           val potentiallyStoredBinders = stored.unzip._1.toSet
           // compute intersection of all symbols in the tree `in` and all potentially stored subpat binders
-          new DeepFolder[Unit]((x: Unit, t:Tree) => if (potentiallyStoredBinders(t.symbol)) usedBinders += t.symbol).apply((), in)
+          def computeBinders(implicit ctx: Context) = new DeepFolder[Unit]((x: Unit, t:Tree) =>
+            if (potentiallyStoredBinders(t.symbol)) usedBinders += t.symbol).apply((), in)
+          computeBinders(ctx.addMode(Mode.FutureDefsOK)) // trigged a NotDefinedHere on $outer when compiler dotc/printing
 
           if (usedBinders.isEmpty) in
           else {
@@ -552,7 +555,7 @@ class PatternMatcher extends MiniPhaseTransform with DenotTransformer {thisTrans
      *   The same exception for Seq patterns applies: if the last extractor is of type `Seq[U_N]`,
      *   the pattern must have at least N arguments (exactly N if the last argument is annotated with `: _*`).
      *   The arguments starting at N (and beyond) are taken from the sequence returned by apply_N,
-     *   and it is checked that that sequence has enough elements to provide values for all expected sub-patterns.
+     *   and it is checked that the sequence has enough elements to provide values for all expected sub-patterns.
      *
      *   For a case class C, the implementation is assumed to be `def unapply_I(x: C) = x._I`,
      *   and the extractor call is inlined under that assumption.
@@ -1440,9 +1443,8 @@ class PatternMatcher extends MiniPhaseTransform with DenotTransformer {thisTrans
       // require (nbSubPats > 0 && (!lastIsStar || isSeq))
       protected def subPatRefs(binder: Symbol): List[Tree] = {
         val refs = if (totalArity > 0 && isSeq) subPatRefsSeq(binder)
-        else if (defn.isProductSubType(binder.info)) productElemsToN(binder, totalArity)
+        else if (totalArity > 1 && !isSeq) productElemsToN(binder, totalArity)
         else ref(binder):: Nil
-        val refsSymbols = refs.map(_.symbol)  // just for debugging
         refs
       }
 

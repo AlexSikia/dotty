@@ -4,7 +4,7 @@ package core
 
 import Types._, Contexts._, Symbols._, Denotations._, SymDenotations._, StdNames._, Names._
 import Flags._, Scopes._, Decorators._, NameOps._, util.Positions._
-import pickling.UnPickler.ensureConstructor
+import unpickleScala2.Scala2Unpickler.ensureConstructor
 import scala.annotation.{ switch, meta }
 import scala.collection.{ mutable, immutable }
 import PartialFunction._
@@ -99,7 +99,8 @@ class Definitions {
   lazy val RootPackage: TermSymbol = ctx.newSymbol(
     NoSymbol, nme.ROOTPKG, PackageCreationFlags, TypeRef(NoPrefix, RootClass))
 
-  lazy val EmptyPackageVal = ctx.newCompletePackageSymbol(RootClass, nme.EMPTY_PACKAGE).entered
+  lazy val EmptyPackageVal = ctx.newPackageSymbol(
+    RootClass, nme.EMPTY_PACKAGE, (emptypkg, emptycls) => ctx.rootLoader(emptypkg)).entered
   lazy val EmptyPackageClass = EmptyPackageVal.moduleClass.asClass
 
   /** A package in which we can place all methods that are interpreted specially by the compiler */
@@ -336,6 +337,8 @@ class Definitions {
   lazy val ContravariantBetweenClass = ctx.requiredClass("dotty.annotation.internal.ContravariantBetween")
   lazy val ScalaSignatureAnnot = ctx.requiredClass("scala.reflect.ScalaSignature")
   lazy val ScalaLongSignatureAnnot = ctx.requiredClass("scala.reflect.ScalaLongSignature")
+  lazy val TASTYSignatureAnnot = ctx.requiredClass("scala.annotation.internal.TASTYSignature")
+  lazy val TASTYLongSignatureAnnot = ctx.requiredClass("scala.annotation.internal.TASTYLongSignature")
   lazy val DeprecatedAnnot = ctx.requiredClass("scala.deprecated")
   lazy val MigrationAnnot = ctx.requiredClass("scala.annotation.migration")
   lazy val AnnotationDefaultAnnot = ctx.requiredClass("dotty.annotation.internal.AnnotationDefault")
@@ -447,9 +450,10 @@ class Definitions {
 
   lazy val isPolymorphicAfterErasure = Set[Symbol](Any_isInstanceOf, Any_asInstanceOf, newRefArrayMethod)
 
-  lazy val RootImports = List[Symbol](JavaLangPackageVal, ScalaPackageVal, ScalaPredefModule, DottyPredefModule)
+  val RootImportFns = List[() => Symbol](() => JavaLangPackageVal, () => ScalaPackageVal, () => ScalaPredefModule, () => DottyPredefModule)
 
-  lazy val overriddenBySynthetic = Set[Symbol](Any_equals, Any_hashCode, Any_toString, Product_canEqual)
+  lazy val RootImports = RootImportFns.map(_())
+
   def isTupleType(tp: Type)(implicit ctx: Context) = {
     val arity = tp.dealias.argInfos.length
     arity <= MaxTupleArity && (tp isRef TupleClass(arity))
@@ -536,7 +540,7 @@ class Definitions {
 
   // ----- primitive value class machinery ------------------------------------------
 
-  lazy val ScalaNumericValueClasses: collection.Set[Symbol] =  Set(
+  lazy val ScalaNumericValueClassList = List(
     ByteClass,
     ShortClass,
     CharClass,
@@ -545,6 +549,7 @@ class Definitions {
     FloatClass,
     DoubleClass)
 
+  lazy val ScalaNumericValueClasses: collection.Set[Symbol] = ScalaNumericValueClassList.toSet
   lazy val ScalaValueClasses: collection.Set[Symbol] = ScalaNumericValueClasses + UnitClass + BooleanClass
 
   lazy val ScalaBoxedClasses = ScalaValueClasses map boxedClass
