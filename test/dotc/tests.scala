@@ -44,6 +44,7 @@ class tests extends CompilerTest {
   val dotcDir   = toolsDir + "dotc/"
   val coreDir   = dotcDir + "core/"
 
+
   @Test def pickle_pickleOK = compileDir(testsDir, "pickling", testPickling)
 // This directory doesn't exist anymore
 // @Test def pickle_pickling = compileDir(coreDir, "pickling", testPickling)
@@ -88,6 +89,15 @@ class tests extends CompilerTest {
   @Test def pos_specialization = compileFile(posDir, "specialization")
 
   @Test def pos_all = compileFiles(posDir) // twice omitted to make tests run faster
+
+  @Test def pos_specialization = compileFile(posDir, "specialization")
+
+// contains buggy tests
+  @Test def pos_all = compileFiles(posDir, failedOther)
+
+  @Test def pos_SI7638 = compileFile(posDir, "SI-7638")
+  @Test def pos_SI7638a = compileFile(posDir, "SI-7638a")
+
 
   @Test def new_all = compileFiles(newDir, twice)
 
@@ -150,7 +160,6 @@ class tests extends CompilerTest {
   @Test def run_all = runFiles(runDir)
 
   @Test def dotty = compileDir(dottyDir, "tools", "-deep" :: "-Ycheck-reentrant" :: allowDeepSubtypes ++ twice) // note the -deep argument
-
 
   @Test def dotc_ast = compileDir(dotcDir, "ast")
   @Test def dotc_config = compileDir(dotcDir, "config")
