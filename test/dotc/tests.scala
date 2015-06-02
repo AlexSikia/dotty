@@ -29,6 +29,7 @@ class tests extends CompilerTest {
   val staleSymbolError: List[String] = List()
 
   val allowDeepSubtypes = defaultOptions diff List("-Yno-deep-subtypes")
+<<<<<<< HEAD
   val allowDoubleBindings = defaultOptions diff List("-Yno-double-bindings")
 
   val testsDir      = "./tests/"
@@ -83,9 +84,9 @@ class tests extends CompilerTest {
   @Test def pos_nullarify = compileFile(posDir, "nullarify", args = "-Ycheck:nullarify" :: Nil)
   @Test def pos_subtyping = compileFile(posDir, "subtyping", twice)
   @Test def pos_t2613 = compileFile(posSpecialDir, "t2613")(allowDeepSubtypes)
-  @Test def pos_packageObj = compileFile(posDir, "i0239", twice)
-  @Test def pos_anonClassSubtyping = compileFile(posDir, "anonClassSubtyping", twice)
-  @Test def pos_extmethods = compileFile(posDir, "extmethods", twice)
+  @Test def pos_packageObj = compileFile(posDir, "i0239")
+  @Test def pos_anonClassSubtyping = compileFile(posDir, "anonClassSubtyping")
+  @Test def pos_specialization = compileFile(posDir, "specialization")
 
   @Test def pos_all = compileFiles(posDir) // twice omitted to make tests run faster
 
@@ -138,9 +139,94 @@ class tests extends CompilerTest {
   @Test def neg_instantiateAbstract = compileFile(negDir, "instantiateAbstract", xerrors = 8)
   @Test def neg_selfInheritance = compileFile(negDir, "selfInheritance", xerrors = 5)
 
+  @Test def dotc = compileDir(dotcDir + "tools/dotc", failedOther)(allowDeepSubtypes)
+//buggy ->
+  @ Test def dotc_ast = compileDir(dotcDir + "tools/dotc/ast", failedOther) // similar to dotc_config
+  @Test def dotc_config = compileDir(dotcDir + "tools/dotc/config_debug", failedOther) // seems to mess up stack frames
+//buggy ->
+  @ Test def dotc_core = compileDir(dotcDir + "tools/dotc/core", failedUnderscore)(allowDeepSubtypes)
+  // fails due to This refference to a non-eclosing class. Need to check
 
-  @Test def run_all = runFiles(runDir)
+//buggy ->
+  @ Test def dotc_core_pickling = compileDir(dotcDir + "tools/dotc/core/pickling", failedOther)(allowDeepSubtypes) // Cannot emit primitive conversion from V to Z
 
+//buggy ->
+  @ Test def dotc_transform = compileDir(dotcDir + "tools/dotc/transform", failedbyName)
 
-  @Test def dotty = compileDir(dottyDir, "tools", "-deep" :: allowDeepSubtypes ++ twice) // note the -deep argument
+//buggy ->
+  @ Test def dotc_parsing = compileDir(dotcDir + "tools/dotc/parsing", failedOther)
+    //  Expected primitive types I - Ljava/lang/Object
+    //  Tried to return an object where expected type was Integer
+//buggy ->
+  @ Test def dotc_printing = compileDir(dotcDir + "tools/dotc/printing", failedOther)
+  @Test def dotc_reporting = compileDir(dotcDir + "tools/dotc/reporting", twice)
+//buggy ->
+  @Test def dotc_typer = compileDir(dotcDir + "tools/dotc/typer", failedOther) // similar to dotc_config
+  //@Test def dotc_util = compileDir(dotcDir + "tools/dotc/util") //fails inside ExtensionMethods with ClassCastException
+//buggy ->
+  @Test def tools_io = compileDir(dotcDir + "tools/io", failedOther) // similar to dotc_config
+
+  @Test def helloWorld = compileFile(posDir, "HelloWorld", doEmitBytecode)
+  @Test def labels = compileFile(posDir, "Labels", doEmitBytecode)
+  //@Test def tools = compileDir(dotcDir + "tools", "-deep" :: Nil)(allowDeepSubtypes)
+
+//buggy ->
+  @ Test def testNonCyclic = compileArgs(Array(
+      dotcDir + "tools/dotc/CompilationUnit.scala",
+      dotcDir + "tools/dotc/core/Types.scala",
+      dotcDir + "tools/dotc/ast/Trees.scala",
+      failedUnderscore.head,
+      "-Xprompt",
+      "#runs", "2"))
+
+  @Test def testIssue_34 = compileArgs(Array(
+      dotcDir + "tools/dotc/config/Properties.scala",
+      dotcDir + "tools/dotc/config/PathResolver.scala",
+      //"-Ylog:frontend",
+      "-Xprompt",
+      "#runs", "2"))
+
+  @Test def dotc_ast = compileDir(dotcDir, "ast")
+  @Test def dotc_config = compileDir(dotcDir, "config")
+  @Test def dotc_core = compileDir(dotcDir, "core")("-Yno-double-bindings" :: allowDeepSubtypes)// twice omitted to make tests run faster
+
+  @Test def dotc_core_pickling = compileDir(coreDir, "pickling")(allowDeepSubtypes)// twice omitted to make tests run faster
+
+  @Test def dotc_transform = compileDir(dotcDir, "transform")// twice omitted to make tests run faster
+  
+  //@Test def dotc_compilercommand = compileFile(dotcDir + "tools/dotc/config/", "CompilerCommand")
+
+  @Test def dotc_parsing = compileDir(dotcDir, "parsing") // twice omitted to make tests run faster
+
+  @Test def dotc_printing = compileDir(dotcDir, "printing") // twice omitted to make tests run faster
+
+  @Test def dotc_reporting = compileDir(dotcDir, "reporting") // twice omitted to make tests run faster
+
+  @Test def dotc_typer = compileDir(dotcDir, "typer")// twice omitted to make tests run faster
+    // error: error while loading Checking$$anon$2$,
+    // class file 'target/scala-2.11/dotty_2.11-0.1-SNAPSHOT.jar(dotty/tools/dotc/typer/Checking$$anon$2.class)'
+    // has location not matching its contents: contains class $anon
+
+  @Test def dotc_util = compileDir(dotcDir, "util") // twice omitted to make tests run faster
+
+  @Test def tools_io = compileDir(toolsDir, "io") // inner class has symbol <none>
+
+  @Test def helloWorld = compileFile(posDir, "HelloWorld")
+  @Test def labels = compileFile(posDir, "Labels", twice)
+  //@Test def tools = compileDir(dottyDir, "tools", "-deep" :: Nil)(allowDeepSubtypes)
+
+  @Test def testNonCyclic = compileList("testNonCyclic", List(
+      dotcDir + "CompilationUnit.scala",
+      coreDir + "Types.scala",
+      dotcDir + "ast/Trees.scala"
+    ), List("-Xprompt") ++ staleSymbolError ++ twice)
+
+  @Test def testIssue_34 = compileList("testIssue_34", List(
+      dotcDir + "config/Properties.scala",
+      dotcDir + "config/PathResolver.scala"
+    ), List(/* "-Ylog:frontend", */ "-Xprompt") ++ staleSymbolError ++ twice)
+
+  val javaDir = "./tests/pos/java-interop/"
+  @Test def java_all = compileFiles(javaDir, twice)
+  //@Test def dotc_compilercommand = compileFile(dotcDir + "config/", "CompilerCommand")
 }
