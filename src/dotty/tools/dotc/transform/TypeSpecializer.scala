@@ -22,15 +22,15 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
   final val maxTparamsToSpecialize = 2
 
   private final def specialisedTypeToSuffix(implicit ctx: Context) =
-    Map(defn.ByteType -> "$mcB$sp",
-      defn.BooleanType -> "$mcZ$sp",
-      defn.ShortType -> "$mcS$sp",
-      defn.IntType -> "$mcI$sp",
-      defn.LongType -> "$mcJ$sp",
-      defn.FloatType -> "$mcF$sp",
-      defn.DoubleType -> "$mcD$sp",
-      defn.CharType -> "$mcC$sp",
-      defn.UnitType -> "$mcV$sp")
+    Map(defn.ByteType -> "B",
+      defn.BooleanType -> "Z",
+      defn.ShortType -> "S",
+      defn.IntType -> "I",
+      defn.LongType -> "J",
+      defn.FloatType -> "F",
+      defn.DoubleType -> "D",
+      defn.CharType -> "C",
+      defn.UnitType -> "V")
 
   private def primitiveTypes(implicit ctx: Context) =
     List(defn.ByteType,
@@ -102,7 +102,7 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
     def generateSpecializedSymbols(instantiations: List[Type], names: List[String], poly: PolyType, decl: Symbol)
                                   (implicit ctx: Context): List[Symbol] = {
       val newSym =
-        ctx.newSymbol(decl.owner, (decl.name + names.mkString).toTermName,
+        ctx.newSymbol(decl.owner, (decl.name + "$mc" + names.mkString + "$sp").toTermName,
           decl.flags | Flags.Synthetic, poly.instantiate(instantiations.toList))
 
       /* The following generated symbols which kept type bounds. It served, as illustrated by the `this_specialization`

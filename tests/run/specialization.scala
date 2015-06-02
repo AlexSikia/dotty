@@ -22,7 +22,7 @@ object Test extends dotty.runtime.LegacyApp {
     println(baz_methods.filter(_.toString.contains("baz")).length)
 
     val baz_int_param = baz_methods.filter(_.toString.contains("$mcI$sp")).head.getParameterTypes.mkString(",")
-    val bar_int_double_params = bar_methods.filter(s => s.toString.contains("$mcD$sp") && s.toString.contains("$mcI$sp"))
+    val bar_int_double_params = bar_methods.filter(s => s.toString.contains("$mcDI$sp") || s.toString.contains("$mcID$sp"))
     println(baz_int_param)
     println(bar_int_double_params.head.getParameterTypes.mkString(","))
     println(bar_int_double_params.tail.head.getParameterTypes.mkString(","))

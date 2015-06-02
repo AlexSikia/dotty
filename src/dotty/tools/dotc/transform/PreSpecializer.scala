@@ -5,7 +5,7 @@ import dotty.tools.dotc.ast.tpd
 import dotty.tools.dotc.core.Annotations.Annotation
 import dotty.tools.dotc.core.Contexts.Context
 import dotty.tools.dotc.core.StdNames._
-import dotty.tools.dotc.core.{Flags, Definitions, Symbols}
+import dotty.tools.dotc.core.{Flags, Definitions}
 import dotty.tools.dotc.core.Symbols.Symbol
 import dotty.tools.dotc.core.Types.{TermRef, Type}
 import dotty.tools.dotc.transform.TreeTransforms.{TransformerInfo, MiniPhaseTransform}
@@ -51,7 +51,8 @@ class PreSpecializer extends MiniPhaseTransform {
       sym.name != nme.asInstanceOf_ &&
         sym.name != nme.isInstanceOf_ &&
         !(sym is Flags.JavaDefined) &&
-        !sym.isConstructor
+        !sym.isConstructor &&
+        !sym.name.toString.contains("Function2")
     }
 
     if (allowedToSpecialize(sym)) {
@@ -69,7 +70,7 @@ class PreSpecializer extends MiniPhaseTransform {
       }
     } else Nil
   }
-
+  
   override def transformDefDef(tree: tpd.DefDef)(implicit ctx: Context, info: TransformerInfo): tpd.Tree = {
     val tparams = tree.tparams.map(_.symbol)
     val st = tparams.map(getSpec)
