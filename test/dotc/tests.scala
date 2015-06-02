@@ -51,7 +51,7 @@ class tests extends CompilerTest {
   val dotcDir   = toolsDir + "dotc/"
   val coreDir   = dotcDir + "core/"
 
-/*
+
 
   @Test def pickle_pickleOK = compileDir(testsDir, "pickling", testPickling)
 // This directory doesn't exist anymore
@@ -61,7 +61,7 @@ class tests extends CompilerTest {
   //@Test def pickle_core = compileDir(dotcDir, "core", testPickling, xerrors = 2) // two spurious comparison errors in Types and TypeOps
 
   @Test def pos_t2168_pat = compileFile(posDir, "t2168", twice)
-  */@Test def pos_erasure = compileFile(posDir, "erasure", twice)/*
+  @Test def pos_erasure = compileFile(posDir, "erasure", twice)
   @Test def pos_Coder() = compileFile(posDir, "Coder", twice)
   @Test def pos_blockescapes() = compileFile(posDir, "blockescapes", twice)
   @Test def pos_collections() = compileFile(posDir, "collections", twice)
@@ -147,11 +147,11 @@ class tests extends CompilerTest {
   @Test def neg_escapingRefs = compileFile(negDir, "escapingRefs", xerrors = 2)
   @Test def neg_instantiateAbstract = compileFile(negDir, "instantiateAbstract", xerrors = 8)
   @Test def neg_selfInheritance = compileFile(negDir, "selfInheritance", xerrors = 5)
-  */
+
   //@Test def run_all = runFiles(runDir)
   //@Test def run_spec = runFile(runDir, "specialization")
 
-/*
+
   @Test def dotty = compileDir(dottyDir, "tools", "-deep" :: allowDeepSubtypes ++ twice) // note the -deep argument
 
 
@@ -208,7 +208,8 @@ class tests extends CompilerTest {
   @Test def multi_spec = compileFile(specialDir, "multi_specialization", List("-Xprint:specialize"))
   @Test def pos_this_specialization = compileFile(specialDir, "this_specialization", List("-Xprint:specialize"))
   @Test def pos_spec_all = compileFiles(specialDir)
-*/
+
+
   //@Test def mini_method = compileFiles(miniMethodDir)//, List("-Xprint:all"))
   //@Test def mini_more = compileFiles(miniMoreDir)//, List("-Xprint:all"))
   //@Test def pos_all = compileFiles(posDir)//, List("-Xprint:all"))

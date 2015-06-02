@@ -46,7 +46,7 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
 
   private def defn(implicit ctx:Context) = ctx.definitions
 
-  private val specializationRequests: mutable.HashMap[Symbols.Symbol, List[Type]] = mutable.HashMap.empty
+  private var specializationRequests: mutable.HashMap[Symbols.Symbol, List[Type]] = mutable.HashMap.empty
 
   /**
    *  A map that links symbols to their specialized variants.
@@ -65,8 +65,7 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
   }
 
   def getSpecTypes(method: Symbol, poly: PolyType)(implicit ctx: Context): List[Type] = {
-    assert(specializationRequests.contains(method))
-    val requested = specializationRequests(method)
+    val requested = specializationRequests.getOrElse(method, List.empty)
     if (requested.nonEmpty) requested
     else {
       if(ctx.settings.Yspecialize.value == "all") primitiveTypes.filter(tpe => poly.paramBounds.forall(_.contains(tpe)))
@@ -127,11 +126,15 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
     }
 
     if((sym ne defn.ScalaPredefModule.moduleClass) &&
+       !(sym is Flags.JavaDefined) &&
+       !(sym is Flags.Scala2x) &&
        !(sym is Flags.Package) &&
        !sym.isAnonymousClass) {
       sym.info match {
         case classInfo: ClassInfo =>
           val newDecls = classInfo.decls
+            .filter(_.symbol.isCompleted) // we do not want to force symbols here.
+                                          // if there's unforced symbol it means its not used in the source
             .filterNot(_.isConstructor)
             .filter(requestedSpecialization)
             .flatMap(decl => {
@@ -258,7 +261,9 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
 
       else if (betterDefs.nonEmpty) {
         val best = betterDefs.head
-        println(s"method ${fun.symbol.name} of ${fun.symbol.owner} rewired to specialized variant with type (${best._1})")
+        print(s"method ${fun.symbol.name} of ${fun.symbol.owner} rewired to specialized variant with type(s) : ")
+        best._1.map{case TypeRef(_, name) => name}.foreach(print)
+        println()
         val prefix = fun match {
           case Select(pre, name) =>
             pre

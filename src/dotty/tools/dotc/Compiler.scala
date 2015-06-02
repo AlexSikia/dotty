@@ -43,7 +43,6 @@ class Compiler {
       List(new FirstTransform),
       List(new PreSpecializer,
            new RefChecks,
-           new RefChecks,
            new ElimRepeated,
            new NormalizeFlags,
            new ExtensionMethods,

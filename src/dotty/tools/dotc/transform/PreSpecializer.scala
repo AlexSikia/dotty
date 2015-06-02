@@ -7,7 +7,7 @@ import dotty.tools.dotc.core.Contexts.Context
 import dotty.tools.dotc.core.StdNames._
 import dotty.tools.dotc.core.{Flags, Definitions}
 import dotty.tools.dotc.core.Symbols.Symbol
-import dotty.tools.dotc.core.Types.{TermRef, Type}
+import dotty.tools.dotc.core.Types.Type
 import dotty.tools.dotc.transform.TreeTransforms.{TransformerInfo, MiniPhaseTransform}
 
 /**
@@ -18,18 +18,11 @@ class PreSpecializer extends MiniPhaseTransform {
 
   override def phaseName: String = "prespecialize"
 
-  private final def nameToType(name: Type)(implicit ctx: Context) =
-    name.asInstanceOf[TermRef].name.toString match {
-      case s if s.startsWith("Int")     => defn.IntType
-      case s if s.startsWith("Boolean") => defn.BooleanType
-      case s if s.startsWith("Byte")    => defn.ByteType
-      case s if s.startsWith("Long")    => defn.LongType
-      case s if s.startsWith("Short")   => defn.ShortType
-      case s if s.startsWith("Float")   => defn.FloatType
-      case s if s.startsWith("Unit")    => defn.UnitType
-      case s if s.startsWith("Double")  => defn.DoubleType
-      case s if s.startsWith("Char")    => defn.CharType
-    }
+  private final def primitiveCompanionToPrimitive(companion: Type)(implicit ctx: Context) = {
+    val claz = companion.termSymbol.companionClass
+    assert(ctx.definitions.ScalaValueClasses.contains(claz))
+    claz.typeRef
+  }
 
   def defn(implicit ctx: Context): Definitions = ctx.definitions
 
@@ -62,7 +55,7 @@ class PreSpecializer extends MiniPhaseTransform {
           val args = annot.arguments
           if (args.isEmpty) primitiveTypes
           else args.head match {
-            case a@Typed(SeqLiteral(types), _) => types.map(t => nameToType(t.tpe)) // Matches the expected `@specialized(...)` annotations
+            case a@Typed(SeqLiteral(types), _) => types.map(t => primitiveCompanionToPrimitive(t.tpe)) // Matches the expected `@specialized(...)` annotations
             case a@Select(Ident(_), _)         => primitiveTypes  // Matches `Select(Ident(Specializable), Primitives)` which is used in several instances
             case _ => ctx.error("surprising match on specialized annotation"); Nil
           }
