@@ -349,7 +349,9 @@ object Trees {
   }
 
   class BackquotedIdent[-T >: Untyped] private[ast] (name: Name)
-    extends Ident[T](name)
+    extends Ident[T](name) {
+    override def toString = s"BackquotedIdent($name)"
+  }
 
   /** qualifier.name */
   case class Select[-T >: Untyped] private[ast] (qualifier: Tree[T], name: Name)
@@ -358,7 +360,9 @@ object Trees {
   }
 
   class SelectWithSig[-T >: Untyped] private[ast] (qualifier: Tree[T], name: Name, val sig: Signature)
-    extends Select[T](qualifier, name)
+    extends Select[T](qualifier, name) {
+    override def toString = s"SelectWithSig($qualifier, $name, $sig)"
+  }
 
   /** qual.this */
   case class This[-T >: Untyped] private[ast] (qual: TypeName)
@@ -522,6 +526,7 @@ object Trees {
   /** Array(elems) */
   class JavaSeqLiteral[T >: Untyped] private[ast] (elems: List[Tree[T]])
     extends SeqLiteral(elems) {
+    override def toString = s"JavaSeqLiteral($elems)"
   }
 
   /** A type tree that represents an existing or inferred type */
