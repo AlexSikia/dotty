@@ -83,9 +83,9 @@ class tests extends CompilerTest {
   @Test def pos_nullarify = compileFile(posDir, "nullarify", args = "-Ycheck:nullarify" :: Nil)
   @Test def pos_subtyping = compileFile(posDir, "subtyping", twice)
   @Test def pos_t2613 = compileFile(posSpecialDir, "t2613")(allowDeepSubtypes)
-  @Test def pos_packageObj = compileFile(posDir, "i0239", twice)
-  @Test def pos_anonClassSubtyping = compileFile(posDir, "anonClassSubtyping", twice)
-  @Test def pos_extmethods = compileFile(posDir, "extmethods", twice)
+  @Test def pos_packageObj = compileFile(posDir, "i0239")
+  @Test def pos_anonClassSubtyping = compileFile(posDir, "anonClassSubtyping")
+  @Test def pos_specialization = compileFile(posDir, "specialization")
 
   @Test def pos_all = compileFiles(posDir) // twice omitted to make tests run faster
 
@@ -149,8 +149,8 @@ class tests extends CompilerTest {
 
   @Test def run_all = runFiles(runDir)
 
-<<<<<<< HEAD
   @Test def dotty = compileDir(dottyDir, "tools", "-deep" :: "-Ycheck-reentrant" :: allowDeepSubtypes ++ twice) // note the -deep argument
+
 
   @Test def dotc_ast = compileDir(dotcDir, "ast")
   @Test def dotc_config = compileDir(dotcDir, "config")
