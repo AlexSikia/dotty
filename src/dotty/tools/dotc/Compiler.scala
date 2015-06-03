@@ -38,10 +38,13 @@ class Compiler {
   def phases: List[List[Phase]] =
     List(
       List(new FrontEnd),
-      List(new PostTyper),
-      List(new Pickler),
-      List(new FirstTransform),
-      List(new RefChecks,
+      List(new InstChecks),
+      List(new FirstTransform,
+           new SyntheticMethods),
+      List(new SuperAccessors),
+      List(new Pickler), // Pickler needs to come last in a group since it should not pickle trees generated later
+      List(new PreSpecializer,
+           new RefChecks,
            new ElimRepeated,
            new NormalizeFlags,
            new ExtensionMethods,
