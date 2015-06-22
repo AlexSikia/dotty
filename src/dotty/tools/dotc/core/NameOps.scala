@@ -4,7 +4,7 @@ package core
 import java.security.MessageDigest
 import scala.annotation.switch
 import scala.io.Codec
-import Names._, StdNames._, Contexts._, Symbols._, Flags._
+import Names._, dotty.tools.dotc.core.StdNames._, Contexts._, Symbols._, Flags._
 import Decorators.StringDecorator
 import util.{Chars, NameTransformer}
 import Chars.isOperatorPart
@@ -241,10 +241,12 @@ object NameOps {
       case nme.clone_ => nme.clone_
     }
 
-    def specializedFor(returnType: Types.Type, args: List[Types.Type])(implicit ctx: Context): name.ThisName = {
+    def specializedFor(returnType: Types.Type, args: List[Types.Type], methodTypes: List[Types.Type])
+                      (implicit ctx: Context): name.ThisName = {
 
       def typeToTag(tp: Types.Type): Name = {
-        tp.classSymbol match {
+        if (tp eq null) "".toTermName
+        else tp.classSymbol match {
           case t if t eq defn.IntClass     => nme.specializedTypeNames.Int
           case t if t eq defn.BooleanClass => nme.specializedTypeNames.Boolean
           case t if t eq defn.ByteClass    => nme.specializedTypeNames.Byte
@@ -258,8 +260,9 @@ object NameOps {
         }
       }
 
-      name.fromName(name ++ nme.specializedTypeNames.prefix ++
-        args.map(typeToTag).foldRight(typeToTag(returnType))(_ ++ _) ++
+      name.fromName(name ++
+        nme.specializedTypeNames.methodPrefix ++ methodTypes.map(typeToTag).mkString ++
+        nme.specializedTypeNames.classPrefix ++ args.map(typeToTag).foldRight(typeToTag(returnType))(_ ++ _) ++
         nme.specializedTypeNames.suffix)
     }
 
