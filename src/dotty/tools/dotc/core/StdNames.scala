@@ -559,8 +559,8 @@ object StdNames {
       final val Void: N    = "V"
       final val Object: N  = "L"
 
-      final val methodPrefix: N = "$m"
-      final val classPrefix: N = "c"
+      final val prefix: N = "$m"
+      final val separator: N = "c"
       final val suffix: N = "$sp"
     }
 
