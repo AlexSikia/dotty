@@ -241,10 +241,10 @@ object NameOps {
       case nme.clone_ => nme.clone_
     }
 
-    def specializedFor(classTargs: List[Types.Type], classTargsNames: List[Name], methodTargs: List[Types.Type], methodTarsNames: List[Name])(implicit ctx: Context): name.ThisName = {
+    def specializedFor(classTargs: List[Types.Type], classTargsNames: List[Name], methodTargs: List[Types.Type], methodTargsNames: List[Name])(implicit ctx: Context): name.ThisName = {
 
       def typeToTag(tp: Types.Type): Name = {
-        if (tp eq null) "".toTermName
+        if (tp eq null) nme.EMPTY
         else tp.classSymbol match {
           case t if t eq defn.IntClass     => nme.specializedTypeNames.Int
           case t if t eq defn.BooleanClass => nme.specializedTypeNames.Boolean
@@ -259,7 +259,7 @@ object NameOps {
         }
       }
 
-      val methodTags: Seq[Name] = (methodTargs zip methodTarsNames).sortBy(_._2).map(x => typeToTag(x._1))
+      val methodTags: Seq[Name] = (methodTargs zip methodTargsNames)/*.sortBy(_._2)*/.map(x => typeToTag(x._1))
       val classTags: Seq[Name] = (classTargs zip classTargsNames).sortBy(_._2).map(x => typeToTag(x._1))
 
       name.fromName(name ++ nme.specializedTypeNames.prefix ++

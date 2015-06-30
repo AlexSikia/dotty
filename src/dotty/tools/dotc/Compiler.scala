@@ -55,8 +55,6 @@ class Compiler {
            new Splitter),
       List(new TypeSpecializer),
       List(new VCInlineMethods,
-           new LazyVals,
-           new ElimByName,
            new SeqLiterals,
            new InterceptedMethods,
            new Literalize,

@@ -17,6 +17,9 @@ object O6891 {
       ()
     }
   }
+  class Bar[B](val a: String) extends AnyVal {
+    def c: a.type = c
+  }
   // uncaught exception during compilation: Types$TypeError("type mismatch;
   //  found   : A(in method bippy$extension)
   //  required: A(in class Foo)") @ scala.tools.nsc.typechecker.Contexts$Context.issueCommon(Contexts.scala:396)

@@ -2258,7 +2258,7 @@ object Types {
           res ++= nxt.until(nxt + until - id).map(PolyParam(pp, _))
           res.toList
         }
-      def args(pp: PolyType) = mergeArgs(pp, 0, 0, argTypes.length, argTypes, argNum, ListBuffer.empty)
+      def args(pp: PolyType) = mergeArgs(pp, 0, 0, argTypes.length + pp.paramNames.length, argTypes, argNum, ListBuffer.empty)
 
       def pnames(origPnames: List[TypeName] = paramNames, argN: List[Int] = argNum, id: Int = 0, tmp: ListBuffer[TypeName] = ListBuffer.empty): List[TypeName] = {
         if (argN.isEmpty) {
@@ -2423,9 +2423,9 @@ object Types {
    *
    *  @param  origin        The parameter that's tracked by the type variable.
    *  @param  creatorState  The typer state in which the variable was created.
-   *  @param  owningTree    The function part of the TypeApply tree tree that introduces
+   *  @param  owningTree    The function part of the TypeApply tree that introduces
    *                        the type variable.
-   *  @paran  owner         The current owner if the context where the variable was created.
+   *  @param  owner         The current owner if the context where the variable was created.
    *
    *  `owningTree` and `owner` are used to determine whether a type-variable can be instantiated
    *  at some given point. See `Inferencing#interpolateUndetVars`.
