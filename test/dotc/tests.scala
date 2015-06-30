@@ -195,17 +195,18 @@ class tests extends CompilerTest {
 
   @Test def specialization = compileDir(posDir, "specialization", twice)
   @Test def simple_specialization = compileFile(specialDir, "simple_specialization", twice)
-  @Test def mutual_spec = compileFile(specialDir, "mutual_specialization", twice)
   @Test def return_spec = compileFile(specialDir, "return_specialization", twice)
   @Test def nothing_spec = compileFile(specialDir, "nothing_specialization", twice)
   @Test def method_in_class_spec = compileFile(specialDir, "method_in_class_specialization", twice)
   @Test def method_in_method_spec = compileFile(specialDir, "method_in_method_specialization", twice)
   @Test def pos_type_check = compileFile(specialDir, "type_test", twice)
   @Test def bounds_spec = compileFile(specialDir, "bounds_specialization", twice)
-  @Test def multi_spec = compileFile(specialDir, "multi_specialization", twice)
   @Test def pos_this_specialization = compileFile(specialDir, "this_specialization", twice)
   @Test def anyRef_spec = runFile(specialDir, "anyRef_specialization", twice)
   @Test def genClass_spec = compileFile(specialDir, "genericClass_specialization", twice)
+  @Test def partial_specialization = compileFile(specialDir, "partial_specialization", twice)
+  @Test def mutual_spec = compileFile(specialDir, "mutual_specialization", twice)
+  @Test def multi_spec = compileFile(specialDir, "multi_specialization", twice)
 
   //@Test def dotc_compilercommand = compileFile(dotcDir + "config/", "CompilerCommand")
 }
