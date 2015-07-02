@@ -95,10 +95,8 @@ class PreSpecializer extends MiniPhaseTransform {
           else args.head match {
             case a @ Typed(SeqLiteral(types), _) =>
               types.map(t => primitiveCompanionToPrimitive(t.tpe))
-
-            case a @ Ident(groupName) if a.tpe.isInstanceOf[Type] => // Matches `@specialized` annotations on Specializable Groups
+            case a @ Ident(groupName) => // Matches `@specialized` annotations on Specializable Groups
               specializableToPrimitive(a.tpe.asInstanceOf[Type], groupName)
-
             case _ => ctx.error("unexpected match on specialized annotation"); Nil
           }
         case nil => Nil
