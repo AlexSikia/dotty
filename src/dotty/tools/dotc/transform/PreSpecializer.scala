@@ -17,7 +17,7 @@ import dotty.tools.dotc.transform.TreeTransforms.{TreeTransform, MiniPhaseTransf
  * This phase retrieves all `@specialized` anotations,
  * and stores them for the `TypeSpecializer` phase.
  */
-class PreSpecializer extends MiniPhaseTransform with InfoTransformer {
+class PreSpecializer extends MiniPhaseTransform /*with InfoTransformer*/ {
 
   override def phaseName: String = "prespecialize"
 
@@ -109,21 +109,14 @@ class PreSpecializer extends MiniPhaseTransform with InfoTransformer {
     val tparams = tree.tparams.map(_.symbol)
     val st = tparams.zipWithIndex.map{case(sym, i) => (i, getSpec(sym))}
     sendRequests(st, tree)
-    /*if (st.nonEmpty) {
-      st.map{
-        case (index, types) if types.nonEmpty =>
-          ctx.specializePhase.asInstanceOf[TypeSpecializer].registerSpecializationRequest(tree.symbol)(index, types)
-        case _ =>
-      }
-    }*/
     tree
   }
 
-  override def transformTemplate(tree: tpd.Template)(implicit ctx: Context, info: TransformerInfo): tpd.Tree = {
+  /*override def transformTemplate(tree: tpd.Template)(implicit ctx: Context, info: TransformerInfo): tpd.Tree = {
     val st = tree.body.map(_.symbol).zipWithIndex.map{case(sym, i) => (i, getSpec(sym))}
     sendRequests(st, tree)
     tree
-  }
+  }*/
 
   def sendRequests(requests: List[(Int, List[Type])], tree: tpd.Tree)(implicit ctx: Context): Unit = {
     if (requests.nonEmpty) {
@@ -133,23 +126,5 @@ class PreSpecializer extends MiniPhaseTransform with InfoTransformer {
         case _ =>
       }
     }
-  }
-
-  override def transformInfo(tp: Type, sym: Symbol)(implicit ctx: Context): Type = {
-    /*sym.owner match {
-      case cs: ClassSymbol =>
-        if (sym.getAnnotation(defn.SpecializedAnnot).nonEmpty)
-          println(sym + " ; " + sym.annotations)
-        tp
-      case _ =>
-        if (sym.getAnnotation(defn.SpecializedAnnot).nonEmpty)
-          println(sym + " ; " + sym.annotations)
-        tp
-      case _ =>
-        tp
-    }*/
-    /*if (sym.getAnnotation(defn.SpecializedAnnot).nonEmpty)
-      println(sym + " ; " + sym.annotations)*/
-    tp
   }
 }
