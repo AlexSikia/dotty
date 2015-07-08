@@ -52,7 +52,7 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
     numOfTypes > 0 &&
       sym.name != nme.asInstanceOf_ &&
       sym.name != nme.isInstanceOf_ &&
-      sym.name != nme.apply &&
+      //sym.name != nme.apply &&
       !(sym is Flags.JavaDefined) &&
       !sym.isConstructor
 
@@ -176,7 +176,7 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
       case poly: PolyType
         if !(tree.symbol.isConstructor
              || (tree.symbol is Flags.Label)
-             || tree.symbol.name.toString.contains("$extension")
+             //|| tree.symbol.name.toString.contains("$extension")
         ) =>
         val origTParams = tree.tparams.map(_.symbol)
         val origVParams = tree.vparamss.flatten.map(_.symbol)
