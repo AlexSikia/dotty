@@ -66,9 +66,9 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
       }
     }
     else {
-      if (poly.paramNames.length <= ctx.settings.Yspecialize.value) {
+      if (poly.paramNames.length <= 2*ctx.settings.Yspecialize.value) {
         val filteredPrims = primitiveTypes.filter(tpe => poly.paramBounds.forall(_.contains(tpe)))
-        List.range(0, poly.paramNames.length)/*.filter(_ % 2 == 1)*/.map(i => (i, filteredPrims))
+        List.range(0, poly.paramNames.length).filter(_ % 2 == 0).map(i => (i, filteredPrims))
       }
       else Nil
     }
@@ -86,17 +86,17 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
 
   override def transformInfo(tp: Type, sym: Symbol)(implicit ctx: Context): Type = {
 
-    def specializeClasses(sym: Symbol) = {
+    /*def specializeClasses(sym: Symbol) = {
       if (requestedSpecialization(sym))
         println()
-    }
+    }*/
 
     def specializeMethods(sym: Symbol) = {
       sym.info match {
         case classInfo: ClassInfo =>
           val newDecls = classInfo.decls
             .filter(_.symbol.isCompleted) // we do not want to force symbols here.
-            // if there's unforced symbol it means its not used in the source
+                                          // if there's unforced symbol it means its not used in the source
             .filterNot(_.isConstructor)
             .filter(requestedSpecialization)
             .flatMap(decl => {
@@ -164,7 +164,7 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
       !(sym is Flags.Package) &&
       !sym.isAnonymousClass) {
       specializeMethods(sym)
-      specializeClasses(sym)
+      //specializeClasses(sym)
       tp
     } else tp
   }
@@ -173,10 +173,10 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
 
     tree.tpe.widen match {
 
-      case poly: PolyType if !(tree.symbol.isConstructor
-        || (tree.symbol is Flags.Label)
-        /*|| (tree.symbol.name == nme.asInstanceOf_)
-        || (tree.symbol.name == nme.apply)*/
+      case poly: PolyType
+        if !(tree.symbol.isConstructor
+             || (tree.symbol is Flags.Label)
+             || tree.symbol.name.toString.contains("$extension")
         ) =>
         val origTParams = tree.tparams.map(_.symbol)
         val origVParams = tree.vparamss.flatten.map(_.symbol)
@@ -227,13 +227,13 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
                       .substDealias(origTParams, instTypes)
                       .substParams(abstractPolyType, instTypes)
                       .subst(origVParams, vparams.flatten.map(_.tpe))
-                    t = if (tparams.isEmpty) t else t.substParams(newSymType.asInstanceOf[PolyType], tparams)
-                    tp match {
+                    /*t = */if (tparams.isEmpty) t else t.substParams(newSymType.asInstanceOf[PolyType], tparams)
+                    /*tp match {
                       case mp: MethodParam =>
-                        val c = t.substParam(mp, vparams.flatten.last.tpe)
+                        val c = t.substParam(mp, vparams.head.last.tpe)
                         c
                       case _ => t
-                    }
+                    }*/
                   }
                 }
 

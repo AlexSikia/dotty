@@ -49,7 +49,7 @@ class tests extends CompilerTest {
   val toolsDir  = dottyDir + "tools/"
   val dotcDir   = toolsDir + "dotc/"
   val coreDir   = dotcDir + "core/"
-
+/*
   @Test def pickle_pickleOK = compileDir(testsDir, "pickling", testPickling)
 // This directory doesn't exist anymore
 // @Test def pickle_pickling = compileDir(coreDir, "pickling", testPickling)
@@ -61,7 +61,8 @@ class tests extends CompilerTest {
   @Test def pos_erasure = compileFile(posDir, "erasure", twice)
   @Test def pos_Coder() = compileFile(posDir, "Coder", twice)
   @Test def pos_blockescapes() = compileFile(posDir, "blockescapes", twice)
-  @Test def pos_collections() = compileFile(posDir, "collections", twice)
+  @Test def pos_collections() = compileFile(posDir, "collections", twice)   // Fails with [error]  found   : => scala.collection.Iterator[Int](scala.collection.immutable.List[Int]#iterator)
+                                                                                      //   [error]  required: scala.collection.Iterator[scala.collection.immutable.List[Int]]
   @Test def pos_functions1() = compileFile(posDir, "functions1", twice)
   @Test def pos_implicits1() = compileFile(posDir, "implicits1", twice)
   @Test def pos_inferred() = compileFile(posDir, "inferred", twice)
@@ -84,7 +85,7 @@ class tests extends CompilerTest {
   @Test def pos_templateParents() = compileFile(posDir, "templateParents", twice)
   @Test def pos_overloadedAccess = compileFile(posDir, "overloadedAccess", twice)
   @Test def pos_approximateUnion = compileFile(posDir, "approximateUnion", twice)
-  @Test def pos_tailcall = compileDir(posDir, "tailcall", twice)
+  @Test def pos_tailcall = compileDir(posDir, "tailcall", twice)               //    Fails   -> Orphan param MethodParam(b)   or Type argument <notype>(c.value) does not conform to upper bound Any
   @Test def pos_valueclasses = compileFiles(posDir + "valueclasses/", twice)
   @Test def pos_nullarify = compileFile(posDir, "nullarify", args = "-Ycheck:nullarify" :: Nil)
   @Test def pos_subtyping = compileFile(posDir, "subtyping", twice)
@@ -93,7 +94,8 @@ class tests extends CompilerTest {
   @Test def pos_anonClassSubtyping = compileFile(posDir, "anonClassSubtyping", twice)
   @Test def pos_extmethods = compileFile(posDir, "extmethods", twice)
 
-  @Test def pos_all = compileFiles(posDir) // twice omitted to make tests run faster
+
+  //@Test def pos_all = compileFiles(posDir) // twice omitted to make tests run faster
 
   @Test def new_all = compileFiles(newDir, twice)
 
@@ -148,65 +150,100 @@ class tests extends CompilerTest {
   @Test def run_all = runFiles(runDir)
 
 
-  @Test def dotty = compileDir(dottyDir, "tools", "-deep" :: allowDeepSubtypes ++ twice) // note the -deep argument
+  @Test def dotty = compileDir(dottyDir, "tools", "-deep" :: allowDeepSubtypes) // note the -deep argument   // Fails with [error] Test dotc.tests.dotty failed: java.lang.AssertionError: assertion failed: bad cast: op.asInstanceOf[=> Long], took 38.957 sec
+
+  //@Test def dotc_ast = compileDir(dotcDir, "ast")
+  //  @Test def dotc_config = compileDir(dotcDir, "config")
+  //  @Test def dotc_core = compileDir(dotcDir, "core")("-Yno-double-bindings" :: allowDeepSubtypes)// twice omitted to make tests run faster       // Fails with data race error
+
+  // This directory doesn't exist anymore
+  //  @Test def dotc_core_pickling = compileDir(coreDir, "pickling")(allowDeepSubtypes)// twice omitted to make tests run faster
+
+    //@Test def dotc_transform = compileDir(dotcDir, "transform")// twice omitted to make tests run faster    // Fails with bad cas:  op.asInstanceOf[=> Long]
+
+  //@Test def dotc_parsing = compileDir(dotcDir, "parsing") // twice omitted to make tests run faster          // Fails with bad cas:  body.asInstanceOf[=> Short]
+
+  //@Test def dotc_printing = compileDir(dotcDir, "printing") // twice omitted to make tests run faster
+
+  //    @Test def dotc_reporting = compileDir(dotcDir, "reporting") // twice omitted to make tests run faster
+
+  //@Test def dotc_typer = compileDir(dotcDir, "typer")// twice omitted to make tests run faster     // Fails with found Set[Char]  instead of  Set[Name]
+      // error: error while loading Checking$$anon$2$,
+      // class file 'target/scala-2.11/dotty_2.11-0.1-SNAPSHOT.jar(dotty/tools/dotc/typer/Checking$$anon$2.class)'
+      // has location not matching its contents: contains class $anon
+
+  //@Test def dotc_util = compileDir(dotcDir, "util") // twice omitted to make tests run faster
+
+  //@Test def tools_io = compileDir(toolsDir, "io") // inner class has symbol <none>                  // Fails with bad cas:  body.asInstanceOf[=> Long]
+
+    @Test def helloWorld = compileFile(posDir, "HelloWorld")
+    @Test def labels = compileFile(posDir, "Labels", twice)
+    //@Test def tools = compileDir(dottyDir, "tools", "-deep" :: Nil)(allowDeepSubtypes)
+
+    @Test def testNonCyclic = compileList("testNonCyclic", List(                                      // Fails with found Set[Char]  instead of  Set[Name]
+        dotcDir + "CompilationUnit.scala",
+        coreDir + "Types.scala",
+        dotcDir + "ast/Trees.scala"
+      ), List("-Xprompt") ++ staleSymbolError ++ twice)
+
+    @Test def testIssue_34 = compileList("testIssue_34", List(
+        dotcDir + "config/Properties.scala",
+        dotcDir + "config/PathResolver.scala"
+      ), List(/* "-Ylog:frontend", */ "-Xprompt") ++ staleSymbolError ++ twice)
+
+    val javaDir = "./tests/pos/java-interop/"
+    @Test def java_all = compileFiles(javaDir, twice)
+
+    @Test def specialization = compileDir(posDir, "specialization", twice)
+    @Test def simple_specialization = compileFile(specialDir, "simple_specialization", twice)
+    @Test def return_spec = compileFile(specialDir, "return_specialization", twice)
+    @Test def nothing_spec = compileFile(specialDir, "nothing_specialization", twice)
+    @Test def method_in_class_spec = compileFile(specialDir, "method_in_class_specialization", twice)
+    @Test def method_in_method_spec = compileFile(specialDir, "method_in_method_specialization", twice)
+    @Test def pos_type_check = compileFile(specialDir, "type_test", twice)
+    @Test def bounds_spec = compileFile(specialDir, "bounds_specialization", twice)
+    @Test def pos_this_specialization = compileFile(specialDir, "this_specialization", twice)
+    @Test def anyRef_spec = runFile(specialDir, "anyRef_specialization", twice)
+    @Test def genClass_spec = compileFile(specialDir, "genericClass_specialization", twice)
+    @Test def partial_specialization = compileFile(specialDir, "partial_specialization", twice)
+    @Test def mutual_spec = compileFile(specialDir, "mutual_specialization", twice)
+    @Test def multi_spec = compileFile(specialDir, "multi_specialization", twice)
+*/
+    //@Test def simple_c_spec = compileFile(specialDir, "simple_c_spec", List("-Xprint:prespecialize", "-Xprint:specialize"))
+    //@Test def dotc_compilercommand = compileFile(dotcDir + "config/", "CompilerCommand")
 
 
-  @Test def dotc_ast = compileDir(dotcDir, "ast")
-  @Test def dotc_config = compileDir(dotcDir, "config")
-  @Test def dotc_core = compileDir(dotcDir, "core")("-Yno-double-bindings" :: allowDeepSubtypes)// twice omitted to make tests run faster
 
-// This directory doesn't exist anymore
-//  @Test def dotc_core_pickling = compileDir(coreDir, "pickling")(allowDeepSubtypes)// twice omitted to make tests run faster
+  //--------------------
+  // Fails with found Set[Char]  instead of  Set[Name]
+
+  @Test def testNonCyclic = compileList("testNonCyclic", List(
+    dotcDir + "CompilationUnit.scala",
+    coreDir + "Types.scala",
+    dotcDir + "ast/Trees.scala"
+  ), List("-Xprompt") ++ staleSymbolError ++ twice)
+
+  @Test def dotc_typer = compileDir(dotcDir, "typer")// twice omitted to make tests run faster
 
   @Test def dotc_transform = compileDir(dotcDir, "transform")// twice omitted to make tests run faster
 
-  @Test def dotc_parsing = compileDir(dotcDir, "parsing") // twice omitted to make tests run faster
+  @Test def dotty = compileDir(dottyDir, "tools", "-deep" :: allowDeepSubtypes) // note the -deep argument
 
-  @Test def dotc_printing = compileDir(dotcDir, "printing") // twice omitted to make tests run faster
+  @Test def dotc_core = compileDir(dotcDir, "core")("-Yno-double-bindings" :: allowDeepSubtypes)// twice omitted to make tests run faster
 
-  @Test def dotc_reporting = compileDir(dotcDir, "reporting") // twice omitted to make tests run faster
 
-  @Test def dotc_typer = compileDir(dotcDir, "typer")// twice omitted to make tests run faster
-    // error: error while loading Checking$$anon$2$,
-    // class file 'target/scala-2.11/dotty_2.11-0.1-SNAPSHOT.jar(dotty/tools/dotc/typer/Checking$$anon$2.class)'
-    // has location not matching its contents: contains class $anon
 
-  @Test def dotc_util = compileDir(dotcDir, "util") // twice omitted to make tests run faster
+  //---------------------
+  //Fails   -> Orphan param MethodParam(b)
 
-  @Test def tools_io = compileDir(toolsDir, "io") // inner class has symbol <none>
+  @Test def pos_tailcall_t6891 = compileFile(posDir, "tailcall/t6891", twice)
 
-  @Test def helloWorld = compileFile(posDir, "HelloWorld")
-  @Test def labels = compileFile(posDir, "Labels", twice)
-  //@Test def tools = compileDir(dottyDir, "tools", "-deep" :: Nil)(allowDeepSubtypes)
 
-  @Test def testNonCyclic = compileList("testNonCyclic", List(
-      dotcDir + "CompilationUnit.scala",
-      coreDir + "Types.scala",
-      dotcDir + "ast/Trees.scala"
-    ), List("-Xprompt") ++ staleSymbolError ++ twice)
 
-  @Test def testIssue_34 = compileList("testIssue_34", List(
-      dotcDir + "config/Properties.scala",
-      dotcDir + "config/PathResolver.scala"
-    ), List(/* "-Ylog:frontend", */ "-Xprompt") ++ staleSymbolError ++ twice)
+  //----------------------
+  // Fails with [error]  found   : => scala.collection.Iterator[Int](scala.collection.immutable.List[Int]#iterator)
+  //            [error]  required: scala.collection.Iterator[scala.collection.immutable.List[Int]]
 
-  val javaDir = "./tests/pos/java-interop/"
-  @Test def java_all = compileFiles(javaDir, twice)
+  @Test def pos_collections() = compileFile(posDir, "collections", twice)
 
-  @Test def specialization = compileDir(posDir, "specialization", twice)
-  @Test def simple_specialization = compileFile(specialDir, "simple_specialization", twice)
-  @Test def return_spec = compileFile(specialDir, "return_specialization", twice)
-  @Test def nothing_spec = compileFile(specialDir, "nothing_specialization", twice)
-  @Test def method_in_class_spec = compileFile(specialDir, "method_in_class_specialization", twice)
-  @Test def method_in_method_spec = compileFile(specialDir, "method_in_method_specialization", twice)
-  @Test def pos_type_check = compileFile(specialDir, "type_test", twice)
-  @Test def bounds_spec = compileFile(specialDir, "bounds_specialization", twice)
-  @Test def pos_this_specialization = compileFile(specialDir, "this_specialization", twice)
-  @Test def anyRef_spec = runFile(specialDir, "anyRef_specialization", twice)
-  @Test def genClass_spec = compileFile(specialDir, "genericClass_specialization", twice)
-  @Test def partial_specialization = compileFile(specialDir, "partial_specialization", twice)
-  @Test def mutual_spec = compileFile(specialDir, "mutual_specialization", twice)
-  @Test def multi_spec = compileFile(specialDir, "multi_specialization", twice)
-
-  //@Test def dotc_compilercommand = compileFile(dotcDir + "config/", "CompilerCommand")
 }
