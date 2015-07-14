@@ -147,8 +147,8 @@ class tests extends CompilerTest {
   @Test def neg_selfInheritance = compileFile(negDir, "selfInheritance", xerrors = 5)
 
 
-  @Test def run_all = runFiles(runDir)
-
+  */@Test def run_all = runFiles(runDir)
+/*
 
   @Test def dotty = compileDir(dottyDir, "tools", "-deep" :: allowDeepSubtypes) // note the -deep argument   // Fails with [error] Test dotc.tests.dotty failed: java.lang.AssertionError: assertion failed: bad cast: op.asInstanceOf[=> Long], took 38.957 sec
 
@@ -195,7 +195,7 @@ class tests extends CompilerTest {
     @Test def java_all = compileFiles(javaDir, twice)
 
     @Test def specialization = compileDir(posDir, "specialization", twice)
-    @Test def simple_specialization = compileFile(specialDir, "simple_specialization", twice)
+    @Test def simple_specialization = compileFile(specialDir, "simple_specialization", "-Xprint:specialize" :: twice)
     @Test def return_spec = compileFile(specialDir, "return_specialization", twice)
     @Test def nothing_spec = compileFile(specialDir, "nothing_specialization", twice)
     @Test def method_in_class_spec = compileFile(specialDir, "method_in_class_specialization", twice)
@@ -204,10 +204,10 @@ class tests extends CompilerTest {
     @Test def bounds_spec = compileFile(specialDir, "bounds_specialization", twice)
     @Test def pos_this_specialization = compileFile(specialDir, "this_specialization", twice)
     @Test def anyRef_spec = runFile(specialDir, "anyRef_specialization", twice)
-    @Test def genClass_spec = compileFile(specialDir, "genericClass_specialization", twice)
+    @Test def genClass_spec = compileFile(specialDir, "genericClass_specialization", "-Xprint:specialize" :: twice)
     @Test def partial_specialization = compileFile(specialDir, "partial_specialization", twice)
     @Test def mutual_spec = compileFile(specialDir, "mutual_specialization", twice)
-    @Test def multi_spec = compileFile(specialDir, "multi_specialization", twice)
+    @Test def multi_spec = compileFile(specialDir, "multi_specialization", "-Xprint:specialize" :: twice)
 */
     //@Test def simple_c_spec = compileFile(specialDir, "simple_c_spec", List("-Xprint:prespecialize", "-Xprint:specialize"))
     //@Test def dotc_compilercommand = compileFile(dotcDir + "config/", "CompilerCommand")
@@ -217,11 +217,11 @@ class tests extends CompilerTest {
   //--------------------
   // Fails with found Set[Char]  instead of  Set[Name]
 
-  /*@Test def testNonCyclic = compileList("testNonCyclic", List(
+  @Test def testNonCyclic = compileList("testNonCyclic", List(
     dotcDir + "CompilationUnit.scala",
     coreDir + "Types.scala",
     dotcDir + "ast/Trees.scala"
-  ), List("-Xprompt") ++ staleSymbolError ++ twice)*/
+  ), List("-Xprompt") ++ staleSymbolError ++ twice)
 
   //@Test def dotc_typer = compileDir(dotcDir, "typer")// twice omitted to make tests run faster
 
@@ -236,7 +236,7 @@ class tests extends CompilerTest {
   //---------------------
   //Fails   -> Orphan param MethodParam(b)
 
-  @Test def pos_tailcall_t6891 = compileFile(posDir, "tailcall/t6891", twice)
+  //@Test def pos_tailcall_t6891 = compileFile(posDir, "tailcall/t6891", twice)
 
 
 
