@@ -10,7 +10,7 @@ object Test extends dotty.runtime.LegacyApp {
     def baz[@specialized(Int, Char) V](v: V): V = v
   }
   class Kung {
-    def kung[@specialized U, V](u: U, v: V) = v
+    def kung[@specialized U, V](u: U, v: V) = println(u.getClass)
   }
 
   override def main(args: Array[String]): Unit = {
@@ -45,5 +45,11 @@ object Test extends dotty.runtime.LegacyApp {
     println(baz_int_param)
     println(bar_int_double_params.head.getParameterTypes.mkString(","))
     println(kung_int_gen_params.head.getParameterTypes.mkString(","))
+
+    def genericKung[A](a: A) = d.kung(a, a)
+    genericKung(1)
+
+    d.kung(1, 1)
+    d.kung(1.0, 1.0)
   }
 }
