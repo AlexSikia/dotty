@@ -58,10 +58,9 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
     numOfTypes > 0 &&
       sym.name != nme.asInstanceOf_ &&
       !newSymbolMap.contains(sym) &&
-      //sym.name != nme.isInstanceOf_ &&
       !sym.name.toString.contains("$sp") &&
       !(sym is Flags.JavaDefined) &&
-      !sym.isConstructor
+      !sym.isPrimaryConstructor
 
 
   def getSpecTypes(method: Symbol, poly: PolyType)(implicit ctx: Context): List[(Int, List[Type])] = {
@@ -71,9 +70,9 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
       poly.paramNames.zipWithIndex.map{case(name, i) => (i, requested.getOrElse(i, Nil))}
     }
     else {
-      if (poly.paramNames.length <= 2*ctx.settings.Yspecialize.value) { // TODO revert to full specialisation (not even params only)
+      if (ctx.settings.Yspecialize.value > 0) {
         val filteredPrims = primitiveTypes.filter(tpe => poly.paramBounds.forall(_.contains(tpe)))
-        List.range(0, poly.paramNames.length).filter(_ % 2 == 0).map(i => (i, filteredPrims))
+        List.range(0, Math.min(poly.paramNames.length, ctx.settings.Yspecialize.value)).map(i => (i, filteredPrims))
       }
       else Nil
     }
@@ -234,7 +233,14 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
                       .substDealias(origTParams, instTypes)
                       .substParams(abstractPolyType, instTypes)
                       .subst(origVParams, vparams.flatten.map(_.tpe))
-                    if (tparams.isEmpty) t else t.substParams(newSymType.asInstanceOf[PolyType], tparams)
+                    newSymType match {
+                      case mt: MethodType if tparams.isEmpty =>
+                        t.substParams(newSymType.asInstanceOf[MethodType], vparams.flatten.map(_.tpe))
+                      case pt: PolyType =>
+                        t.substParams(newSymType.asInstanceOf[PolyType], tparams)
+                         .substParams(newSymType.resultType.asInstanceOf[MethodType], vparams.flatten.map(_.tpe))
+                      case _ => t
+                    }
                   }
                 }
 
@@ -276,7 +282,7 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
                   }}
                 val expectedTypeFixed = tp.transform(typesReplaced)
                 if (expectedTypeFixed ne EmptyTree) {
-                  expectedTypeFixed.ensureConforms(typemap(newSym.info.widen.finalResultType))
+                  expectedTypeFixed.ensureConforms(typemap(newSym.info.widen.finalResultType.widenDealias))
                 }
                 else expectedTypeFixed
               }})
