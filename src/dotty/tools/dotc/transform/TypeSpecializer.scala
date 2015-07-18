@@ -13,6 +13,8 @@ import scala.collection.mutable
 import dotty.tools.dotc.core.StdNames.nme
 import dotty.tools._
 
+import scala.collection.mutable.ListBuffer
+
 class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
 
   import tpd._
@@ -53,6 +55,11 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
    *  A map from specialised symbols to the indices of their remaining generic types
    */
   private val newSymbolsGenericIndices: mutable.HashMap[Symbol, List[Int]] = mutable.HashMap.empty
+
+  /**
+   *  A list of symbols gone through the specialisation pipeline
+   */
+  private val specialized: ListBuffer[Symbol] = ListBuffer.empty
 
   def allowedToSpecialize(sym: Symbol, numOfTypes: Int)(implicit ctx: Context) =
     numOfTypes > 0 &&
@@ -97,6 +104,7 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
     }
 
     def specializeMethods(sym: Symbol) = {
+      specialized += sym
       sym.info match {
         case classInfo: ClassInfo =>
           val newDecls = classInfo.decls
@@ -167,7 +175,8 @@ class TypeSpecializer extends MiniPhaseTransform  with InfoTransformer {
       newSym
     }
 
-    if ((sym ne defn.ScalaPredefModule.moduleClass) &&
+    if (!specialized.contains(sym) &&
+      (sym ne defn.ScalaPredefModule.moduleClass) &&
       !(sym is Flags.JavaDefined) &&
       !(sym is Flags.Scala2x) &&
       !(sym is Flags.Package) &&
