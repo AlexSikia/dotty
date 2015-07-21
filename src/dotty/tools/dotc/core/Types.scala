@@ -1,4 +1,5 @@
-package dotty.tools.dotc
+package dotty.tools
+package dotc
 package core
 
 import util.common._
@@ -37,7 +38,7 @@ import scala.collection.mutable.ListBuffer
 
 object Types {
 
-  private var nextId = 0
+  @sharable private var nextId = 0
 
   /** The class of types.
    *  The principal subclasses and sub-objects are as follows:
@@ -50,6 +51,7 @@ object Types {
    *        |              |                +--- SuperType
    *        |              |                +--- ConstantType
    *        |              |                +--- MethodParam
+   *        |              |                +----RefinedThis
    *        |              |                +--- SkolemType
    *        |              +- PolyParam
    *        |              +- RefinedType
@@ -74,6 +76,7 @@ object Types {
 
 // ----- Tests -----------------------------------------------------
 
+    // debug only: a unique identifier for a type
     val uniqId = {
       nextId = nextId + 1
 //      if (nextId == 19555)
@@ -91,9 +94,10 @@ object Types {
     final def isValueType: Boolean = this.isInstanceOf[ValueType]
 
     /** Does this type denote a stable reference (i.e. singleton type)? */
-    final def isStable(implicit ctx: Context): Boolean = this match {
-      case tp: TermRef => tp.termSymbol.isStable
+    final def isStable(implicit ctx: Context): Boolean = stripTypeVar match {
+      case tp: TermRef => tp.termSymbol.isStable && tp.prefix.isStable
       case _: SingletonType => true
+      case tp: RefinedType => tp.parent.isStable
       case NoPrefix => true
       case _ => false
     }
@@ -155,18 +159,6 @@ object Types {
       case _ =>
         false
     }
-
-    /** A type T is a legal prefix in a type selection T#A if
-     *  T is stable or T contains no abstract types except possibly A.
-     *  !!! Todo: What about non-final vals that contain abstract types?
-     */
-    final def isLegalPrefixFor(selector: Name)(implicit ctx: Context): Boolean =
-      isStable || {
-        val absTypeNames = memberNames(abstractTypeNameFilter)
-        if (absTypeNames.nonEmpty) typr.println(s"abstract type members of ${this.showWithUnderlying()}: $absTypeNames")
-        absTypeNames.isEmpty ||
-          absTypeNames.head == selector && absTypeNames.tail.isEmpty
-      }
 
     /** Is this type guaranteed not to have `null` as a value?
      *  For the moment this is only true for modules, but it could
@@ -451,7 +443,7 @@ object Types {
       def goRefined(tp: RefinedType) = {
         val pdenot = go(tp.parent)
         val rinfo =
-          if (tp.refinementRefersToThis) tp.refinedInfo.substSkolem(tp, pre)
+          if (tp.refinementRefersToThis) tp.refinedInfo.substRefinedThis(tp, pre)
           else tp.refinedInfo
         if (name.isTypeName) { // simplified case that runs more efficiently
           val jointInfo =
@@ -596,7 +588,7 @@ object Types {
      */
     final def asSeenFrom(pre: Type, cls: Symbol)(implicit ctx: Context): Type = track("asSeenFrom") {
       if (!cls.membersNeedAsSeenFrom(pre)) this
-      else ctx.asSeenFrom(this, pre, cls, null)
+      else ctx.asSeenFrom(this, pre, cls)
     }
 
 // ----- Subtype-related --------------------------------------------
@@ -611,6 +603,19 @@ object Types {
      */
     final def =:=(that: Type)(implicit ctx: Context): Boolean = track("=:=") {
       ctx.typeComparer.isSameType(this, that)
+    }
+
+    /** Is this type a primitive value type which can be widened to the primitive value type `that`? */
+    def isValueSubType(that: Type)(implicit ctx: Context) = widenExpr match {
+      case self: TypeRef if defn.ScalaValueClasses contains self.symbol =>
+        that.widenExpr match {
+          case that: TypeRef if defn.ScalaValueClasses contains that.symbol =>
+            defn.isValueSubClass(self.symbol, that.symbol)
+          case _ =>
+            false
+        }
+      case _ =>
+        false
     }
 
     /** Is this type a legal type for a member that overrides another
@@ -835,7 +840,7 @@ object Types {
           object instantiate extends TypeMap {
             var isSafe = true
             def apply(tp: Type): Type = tp match {
-              case TypeRef(SkolemType(`pre`), name) if name.isLambdaArgName =>
+              case TypeRef(RefinedThis(`pre`), name) if name.isLambdaArgName =>
                 val TypeAlias(alias) = member(name).info
                 alias
               case tp: TypeVar if !tp.inst.exists =>
@@ -858,13 +863,15 @@ object Types {
               if (pre.refinedName ne name) loop(pre.parent, pre.refinedName :: resolved)
               else if (!pre.refinementRefersToThis) alias
               else alias match {
-                case TypeRef(SkolemType(`pre`), aliasName) => lookupRefined(aliasName) // (1)
+                case TypeRef(RefinedThis(`pre`), aliasName) => lookupRefined(aliasName) // (1)
                 case _ => if (name == tpnme.Apply) betaReduce(alias) else NoType // (2)
               }
             case _ => loop(pre.parent, resolved)
           }
-        case SkolemType(binder) =>
+        case RefinedThis(binder) =>
           binder.lookupRefined(name)
+        case SkolemType(tp) =>
+          tp.lookupRefined(name)
         case pre: WildcardType =>
           WildcardType
         case pre: TypeRef =>
@@ -933,6 +940,7 @@ object Types {
     /** the self type of the underlying classtype */
     def givenSelfType(implicit ctx: Context): Type = this match {
       case tp @ RefinedType(parent, name) => tp.wrapIfMember(parent.givenSelfType)
+      case tp: ThisType => tp.tref.givenSelfType
       case tp: TypeProxy => tp.underlying.givenSelfType
       case _ => NoType
     }
@@ -1037,8 +1045,8 @@ object Types {
       if (cls.isStaticOwner) this else ctx.substThis(this, cls, tp, null)
 
     /** Substitute all occurrences of `SkolemType(binder)` by `tp` */
-    final def substSkolem(binder: Type, tp: Type)(implicit ctx: Context): Type =
-      ctx.substSkolem(this, binder, tp, null)
+    final def substRefinedThis(binder: Type, tp: Type)(implicit ctx: Context): Type =
+      ctx.substRefinedThis(this, binder, tp, null)
 
     /** Substitute a bound type by some other type */
     final def substParam(from: ParamType, to: Type)(implicit ctx: Context): Type =
@@ -1415,7 +1423,7 @@ object Types {
      *  to an (unbounded) wildcard type.
      *
      *  (2) Reduce a type-ref `T { X = U; ... } # X`  to   `U`
-     *  provided `U` does not refer with a SkolemType to the
+     *  provided `U` does not refer with a RefinedThis to the
      *  refinement type `T { X = U; ... }`
      */
     def reduceProjection(implicit ctx: Context): Type = {
@@ -1829,7 +1837,7 @@ object Types {
 
     def refinementRefersToThis(implicit ctx: Context): Boolean = {
       if (!refinementRefersToThisKnown) {
-        refinementRefersToThisCache = refinedInfo.containsSkolemType(this)
+        refinementRefersToThisCache = refinedInfo.containsRefinedThis(this)
         refinementRefersToThisKnown = true
       }
       refinementRefersToThisCache
@@ -1865,7 +1873,7 @@ object Types {
         derivedRefinedType(parent.EtaExpand, refinedName, refinedInfo)
       else
         if (false) RefinedType(parent, refinedName, refinedInfo)
-        else RefinedType(parent, refinedName, rt => refinedInfo.substSkolem(this, SkolemType(rt)))
+        else RefinedType(parent, refinedName, rt => refinedInfo.substRefinedThis(this, RefinedThis(rt)))
     }
 
     /** Add this refinement to `parent`, provided If `refinedName` is a member of `parent`. */
@@ -2021,7 +2029,7 @@ object Types {
     def isJava = false
     def isImplicit = false
 
-    private val resType = resultTypeExp(this)
+    private[core] val resType = resultTypeExp(this)
     assert(resType.exists)
 
     override def resultType(implicit ctx: Context): Type =
@@ -2292,7 +2300,7 @@ object Types {
       }
   }
 
-  // ----- Bound types: MethodParam, PolyParam, SkolemType --------------------------
+  // ----- Bound types: MethodParam, PolyParam, RefinedThis --------------------------
 
   abstract class BoundType extends CachedProxyType with ValueType {
     type BT <: Type
@@ -2365,20 +2373,39 @@ object Types {
     }
   }
 
-  /** A skolem type reference with underlying type `binder`. */
-  case class SkolemType(binder: Type) extends BoundType with SingletonType {
-    type BT = Type
+  /** a this-reference to an enclosing refined type `binder`. */
+  case class RefinedThis(binder: RefinedType) extends BoundType with SingletonType {
+    type BT = RefinedType
     override def underlying(implicit ctx: Context) = binder
-    def copyBoundType(bt: BT) = SkolemType(bt)
+    def copyBoundType(bt: BT) = RefinedThis(bt)
 
     // need to customize hashCode and equals to prevent infinite recursion for
     // refinements that refer to the refinement type via this
     override def computeHash = addDelta(binder.identityHash, 41)
     override def equals(that: Any) = that match {
-      case that: SkolemType => this.binder eq that.binder
+      case that: RefinedThis => this.binder eq that.binder
       case _ => false
     }
-    override def toString = s"SkolemType(${binder.hashCode})"
+    override def toString = s"RefinedThis(${binder.hashCode})"
+  }
+
+  // ----- Skolem types -----------------------------------------------
+
+  /** A skolem type reference with underlying type `binder`. */
+  abstract case class SkolemType(info: Type) extends CachedProxyType with ValueType with SingletonType {
+    override def underlying(implicit ctx: Context) = info
+    def derivedSkolemType(info: Type)(implicit ctx: Context) =
+      if (info eq this.info) this else SkolemType(info)
+    override def computeHash: Int = identityHash
+    override def equals(that: Any) = this eq that.asInstanceOf[AnyRef]
+    override def toString = s"Skolem($info)"
+  }
+
+  final class CachedSkolemType(info: Type) extends SkolemType(info)
+
+  object SkolemType {
+    def apply(info: Type)(implicit ctx: Context) =
+      unique(new CachedSkolemType(info))
   }
 
   // ------------ Type variables ----------------------------------------
@@ -2478,6 +2505,11 @@ object Types {
       // of all common base types.
       if (fromBelow && isOrType(inst) && isFullyDefined(inst) && !isOrType(upperBound))
         inst = inst.approximateUnion
+
+      if (ctx.typerState.isGlobalCommittable)
+        assert(!inst.isInstanceOf[PolyParam], i"bad inst $this := $inst, constr = ${ctx.typerState.constraint}")
+          // If this fails, you might want to turn on Config.debugCheckConstraintsClosed
+          // to help find the root of the problem.
 
       instantiateWith(inst)
     }
@@ -2768,13 +2800,13 @@ object Types {
   case class ImportType(expr: Tree) extends UncachedGroundType
 
   /** Sentinel for "missing type" */
-  case object NoType extends CachedGroundType {
+  @sharable case object NoType extends CachedGroundType {
     override def exists = false
     override def computeHash = hashSeed
   }
 
   /** Missing prefix */
-  case object NoPrefix extends CachedGroundType {
+  @sharable case object NoPrefix extends CachedGroundType {
     override def computeHash = hashSeed
   }
 
@@ -2791,7 +2823,7 @@ object Types {
 
   final class CachedWildcardType(optBounds: Type) extends WildcardType(optBounds)
 
-  object WildcardType extends WildcardType(NoType) {
+  @sharable object WildcardType extends WildcardType(NoType) {
     def apply(bounds: TypeBounds)(implicit ctx: Context) = unique(new CachedWildcardType(bounds))
   }
 
@@ -2939,6 +2971,9 @@ object Types {
         case tp: AndOrType =>
           tp.derivedAndOrType(this(tp.tp1), this(tp.tp2))
 
+        case tp: SkolemType =>
+          tp.derivedSkolemType(this(tp.info))
+
         case tp @ AnnotatedType(annot, underlying) =>
           val underlying1 = this(underlying)
           if (underlying1 eq underlying) tp else tp.derivedAnnotatedType(mapOver(annot), underlying1)
@@ -2996,7 +3031,7 @@ object Types {
     }
   }
 
-  object IdentityTypeMap extends TypeMap()(NoContext) {
+  @sharable object IdentityTypeMap extends TypeMap()(NoContext) {
     override def stopAtStatic = true
     def apply(tp: Type) = tp
   }
@@ -3078,6 +3113,9 @@ object Types {
       case tp: AndOrType =>
         this(this(x, tp.tp1), tp.tp2)
 
+      case tp: SkolemType =>
+        this(x, tp.info)
+
       case AnnotatedType(annot, underlying) =>
         this(applyToAnnot(x, annot), underlying)
 
@@ -3125,6 +3163,8 @@ object Types {
             apply(foldOver(maybeAdd(x, tp), tp), tp.underlying)
           case tp: TypeRef =>
             foldOver(maybeAdd(x, tp), tp)
+          case TypeBounds(_, hi) =>
+            apply(x, hi)
           case tp: ThisType =>
             apply(x, tp.underlying)
           case tp: ConstantType =>
@@ -3191,14 +3231,23 @@ object Types {
   // ----- Exceptions -------------------------------------------------------------
 
   class TypeError(msg: String) extends Exception(msg)
-  class FatalTypeError(msg: String) extends TypeError(msg)
 
   class MalformedType(pre: Type, denot: Denotation, absMembers: Set[Name])
-    extends FatalTypeError(
-      s"""malformed type: $pre is not a legal prefix for $denot because it contains abstract type member${if (absMembers.size == 1) "" else "s"} ${absMembers.mkString(", ")}""")
+    extends TypeError(
+      s"malformed type: $pre is not a legal prefix for $denot because it contains abstract type member${if (absMembers.size == 1) "" else "s"} ${absMembers.mkString(", ")}")
+
+  class MissingType(pre: Type, name: Name)(implicit ctx: Context) extends TypeError(
+    i"""cannot resolve reference to type $pre.$name
+       |the classfile defining the type might be missing from the classpath${otherReason(pre)}""".stripMargin)
+
+  private def otherReason(pre: Type)(implicit ctx: Context): String = pre match {
+    case pre: ThisType if pre.givenSelfType.exists =>
+      i"\nor the self type of $pre might not contain all transitive dependencies"
+    case _ => ""
+  }
 
   class CyclicReference private (val denot: SymDenotation)
-    extends FatalTypeError(s"cyclic reference involving $denot") {
+    extends TypeError(s"cyclic reference involving $denot") {
     def show(implicit ctx: Context) = s"cyclic reference involving ${denot.show}"
   }
 
@@ -3214,11 +3263,11 @@ object Types {
     }
   }
 
-  class MergeError(msg: String) extends FatalTypeError(msg)
+  class MergeError(msg: String) extends TypeError(msg)
 
   // ----- Debug ---------------------------------------------------------
 
-  var debugTrace = false
+  @sharable var debugTrace = false
 
   val watchList = List[String](
   ) map (_.toTypeName)

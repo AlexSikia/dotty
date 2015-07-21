@@ -90,7 +90,7 @@ object Implicits {
       }
 
       if (refs.isEmpty) refs
-      else refs filter (refMatches(_)(ctx.fresh.setExploreTyperState.addMode(Mode.TypevarsMissContext))) // create a defensive copy of ctx to avoid constraint pollution
+      else refs filter (refMatches(_)(ctx.fresh.addMode(Mode.TypevarsMissContext).setExploreTyperState)) // create a defensive copy of ctx to avoid constraint pollution
     }
   }
 
@@ -382,21 +382,12 @@ trait Implicits { self: Typer =>
     && !to.isError
     && !ctx.isAfterTyper
     && (ctx.mode is Mode.ImplicitsEnabled)
-    && { from.widenExpr match {
-           case from: TypeRef if defn.ScalaValueClasses contains from.symbol =>
-             to.widenExpr match {
-               case to: TypeRef if defn.ScalaValueClasses contains to.symbol =>
-                 util.Stats.record("isValueSubClass")
-                 return defn.isValueSubClass(from.symbol, to.symbol)
-               case _ =>
-             }
-           case from: ValueType =>
-             ;
-           case _ =>
-             return false
-         }
-         inferView(dummyTreeOfType(from), to)(ctx.fresh.setExploreTyperState).isInstanceOf[SearchSuccess]
-       }
+    && from.isInstanceOf[ValueType]
+    && (  from.isValueSubType(to)
+       || inferView(dummyTreeOfType(from), to)
+            (ctx.fresh.addMode(Mode.ImplicitExploration).setExploreTyperState)
+            .isInstanceOf[SearchSuccess]
+       )
     )
 
   /** Find an implicit conversion to apply to given tree `from` so that the
@@ -430,6 +421,7 @@ trait Implicits { self: Typer =>
     assert(!ctx.isAfterTyper,
       if (argument.isEmpty) i"missing implicit parameter of type $pt after typer"
       else i"type error: ${argument.tpe} does not conform to $pt${err.whyNoMatchStr(argument.tpe, pt)}")
+    val prevConstr = ctx.typerState.constraint
     ctx.traceIndented(s"search implicit ${pt.show}, arg = ${argument.show}: ${argument.tpe.show}", implicits, show = true) {
       assert(!pt.isInstanceOf[ExprType])
       val isearch =
@@ -444,6 +436,7 @@ trait Implicits { self: Typer =>
           val deepPt = pt.deepenProto
           if (deepPt ne pt) inferImplicit(deepPt, argument, pos) else result
         case _ =>
+          assert(prevConstr eq ctx.typerState.constraint)
           result
       }
     }
@@ -459,7 +452,7 @@ trait Implicits { self: Typer =>
         // Not clear whether we need to drop the `.widen` here. All tests pass with it in place, though.
 
     assert(argument.isEmpty || argument.tpe.isValueType || argument.tpe.isInstanceOf[ExprType],
-        d"found: ${argument.tpe}, expected: $pt")
+        d"found: $argument: ${argument.tpe}, expected: $pt")
 
     /** The expected type for the searched implicit */
     lazy val fullProto = implicitProto(pt, identity)
@@ -481,9 +474,11 @@ trait Implicits { self: Typer =>
 
     /** Search a list of eligible implicit references */
     def searchImplicits(eligible: List[TermRef], contextual: Boolean): SearchResult = {
+      val constr = ctx.typerState.constraint
 
       /** Try to typecheck an implicit reference */
       def typedImplicit(ref: TermRef)(implicit ctx: Context): SearchResult = track("typedImplicit") { ctx.traceIndented(i"typed implicit $ref, pt = $pt, implicitsEnabled == ${ctx.mode is ImplicitsEnabled}", implicits, show = true) {
+        assert(constr eq ctx.typerState.constraint)
         var generated: Tree = tpd.ref(ref).withPos(pos)
         if (!argument.isEmpty)
           generated = typedUnadapted(
@@ -491,7 +486,8 @@ trait Implicits { self: Typer =>
             pt)
         val generated1 = adapt(generated, pt)
         lazy val shadowing =
-          typed(untpd.Ident(ref.name) withPos pos.toSynthetic, funProto)(nestedContext.setNewTyperState)
+          typed(untpd.Ident(ref.name) withPos pos.toSynthetic, funProto)
+               (nestedContext.addMode(Mode.ImplicitShadowing).setExploreTyperState)
         def refMatches(shadowing: Tree): Boolean =
           ref.symbol == closureBody(shadowing).symbol || {
             shadowing match {
@@ -501,7 +497,8 @@ trait Implicits { self: Typer =>
           }
         if (ctx.typerState.reporter.hasErrors)
           nonMatchingImplicit(ref)
-        else if (contextual && !shadowing.tpe.isError && !refMatches(shadowing)) {
+        else if (contextual && !ctx.mode.is(Mode.ImplicitShadowing) &&
+                 !shadowing.tpe.isError && !refMatches(shadowing)) {
           implicits.println(i"SHADOWING $ref in ${ref.termSymbol.owner} is shadowed by $shadowing in ${shadowing.symbol.owner}")
           shadowedImplicit(ref, methPart(shadowing).tpe)
         }
@@ -524,8 +521,11 @@ trait Implicits { self: Typer =>
             case fail: SearchFailure =>
               rankImplicits(pending1, acc)
             case best: SearchSuccess =>
-              val newPending = pending1 filter (isAsGood(_, best.ref)(nestedContext.setExploreTyperState))
-              rankImplicits(newPending, best :: acc)
+              if (ctx.mode.is(Mode.ImplicitExploration)) best :: Nil
+              else {
+                val newPending = pending1 filter (isAsGood(_, best.ref)(nestedContext.setExploreTyperState))
+                rankImplicits(newPending, best :: acc)
+              }
           }
         case nil => acc
       }
@@ -681,4 +681,4 @@ class TermRefSet(implicit ctx: Context) extends mutable.Traversable[TermRef] {
         f(TermRef(pre, sym))
 }
 
-object EmptyTermRefSet extends TermRefSet()(NoContext)
+@sharable object EmptyTermRefSet extends TermRefSet()(NoContext)

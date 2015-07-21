@@ -198,9 +198,11 @@ class TreePickler(pickler: TastyPickler) {
       case tpe: SuperType =>
         writeByte(SUPERtype)
         withLength { pickleType(tpe.thistpe); pickleType(tpe.supertpe)}
-      case tpe: SkolemType =>
-        writeByte(SKOLEMtype)
+      case tpe: RefinedThis =>
+        writeByte(REFINEDthis)
         writeRef(pickledTypes.get(tpe.binder).asInstanceOf[Addr])
+      case tpe: SkolemType =>
+        pickleType(tpe.info)
       case tpe: RefinedType =>
         val args = tpe.argInfos(interpolate = false)
         if (args.isEmpty) {
@@ -520,7 +522,7 @@ class TreePickler(pickler: TastyPickler) {
       if (sym.isTerm) {
         if (flags is Implicit) writeByte(IMPLICIT)
         if ((flags is Lazy) && !(sym is Module)) writeByte(LAZY)
-        if (flags is AbsOverride) writeByte(ABSOVERRIDE)
+        if (flags is AbsOverride) { writeByte(ABSTRACT); writeByte(OVERRIDE) }
         if (flags is Mutable) writeByte(MUTABLE)
         if (flags is Accessor) writeByte(FIELDaccessor)
         if (flags is CaseAccessor) writeByte(CASEaccessor)

@@ -46,7 +46,7 @@ object ProtoTypes {
      *  fits the given expected result type.
      */
     def constrainResult(mt: Type, pt: Type)(implicit ctx: Context): Boolean = pt match {
-      case _: FunProto =>
+      case pt: FunProto =>
         mt match {
           case mt: MethodType =>
             mt.isDependent || constrainResult(mt.resultType, pt.resultType)
@@ -151,7 +151,7 @@ object ProtoTypes {
    *  operation is further selection. In this case, the expression need not be a value.
    *  @see checkValue
    */
-  object AnySelectionProto extends SelectionProto(nme.WILDCARD, WildcardType, NoViewsAllowed)
+  @sharable object AnySelectionProto extends SelectionProto(nme.WILDCARD, WildcardType, NoViewsAllowed)
 
   /** A prototype for selections in pattern constructors */
   class UnapplySelectionProto(name: Name) extends SelectionProto(name, WildcardType, NoViewsAllowed)
@@ -308,7 +308,7 @@ object ProtoTypes {
    *
    *    [] _
    */
-  object AnyFunctionProto extends UncachedGroundType with MatchAlways
+  @sharable object AnyFunctionProto extends UncachedGroundType with MatchAlways
 
   /** Add all parameters in given polytype `pt` to the constraint's domain.
    *  If the constraint contains already some of these parameters in its domain,
@@ -341,7 +341,8 @@ object ProtoTypes {
 
   /** The normalized form of a type
    *   - unwraps polymorphic types, tracking their parameters in the current constraint
-   *   - skips implicit parameters
+   *   - skips implicit parameters; if result type depends on implicit parameter,
+   *     replace with Wildcard.
    *   - converts non-dependent method types to the corresponding function types
    *   - dereferences parameterless method types
    *   - dereferences nullary method types provided the corresponding function type
@@ -356,17 +357,22 @@ object ProtoTypes {
   def normalize(tp: Type, pt: Type)(implicit ctx: Context): Type = Stats.track("normalize") {
     tp.widenSingleton match {
       case poly: PolyType => normalize(constrained(poly).resultType, pt)
-      case mt: MethodType if !mt.isDependent /*&& !pt.isInstanceOf[ApplyingProto]*/ =>
-        if (mt.isImplicit) mt.resultType
-        else {
-          val rt = normalize(mt.resultType, pt)
-          if (pt.isInstanceOf[ApplyingProto])
-            mt.derivedMethodType(mt.paramNames, mt.paramTypes, rt)
+      case mt: MethodType =>
+        if (mt.isImplicit)
+          if (mt.isDependent)
+            mt.resultType.substParams(mt, mt.paramTypes.map(Function.const(WildcardType)))
+          else mt.resultType
+        else
+          if (mt.isDependent) tp
           else {
-            val ft = defn.FunctionType(mt.paramTypes, rt)
-            if (mt.paramTypes.nonEmpty || ft <:< pt) ft else rt
+            val rt = normalize(mt.resultType, pt)
+            if (pt.isInstanceOf[ApplyingProto])
+              mt.derivedMethodType(mt.paramNames, mt.paramTypes, rt)
+            else {
+              val ft = defn.FunctionType(mt.paramTypes, rt)
+              if (mt.paramTypes.nonEmpty || ft <:< pt) ft else rt
+            }
           }
-        }
       case et: ExprType => et.resultType
       case _ => tp
     }
@@ -423,7 +429,7 @@ object ProtoTypes {
     def apply(tp: Type) = wildApprox(tp, this)
   }
 
-  private lazy val dummyTree = untpd.Literal(Constant(null))
+  @sharable private lazy val dummyTree = untpd.Literal(Constant(null))
 
   /** Dummy tree to be used as an argument of a FunProto or ViewProto type */
   object dummyTreeOfType {

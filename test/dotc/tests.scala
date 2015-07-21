@@ -112,7 +112,6 @@ class tests extends CompilerTest {
   @Test def neg_companions = compileFile(negDir, "companions", xerrors = 1)
   @Test def neg_over = compileFile(negDir, "over", xerrors = 3)
   @Test def neg_overrides = compileFile(negDir, "overrides", xerrors = 11)
-  @Test def neg_projections = compileFile(negDir, "projections", xerrors = 1)
   @Test def neg_i39 = compileFile(negDir, "i39", xerrors = 2)
   @Test def neg_i50_volatile = compileFile(negDir, "i50-volatile", xerrors = 6)
   @Test def neg_t0273_doubledefs = compileFile(negDir, "t0273", xerrors = 1)
@@ -130,34 +129,37 @@ class tests extends CompilerTest {
   @Test def neg_t1843_variances = compileFile(negDir, "t1843-variances", xerrors = 1)
   @Test def neg_t2660_ambi = compileFile(negDir, "t2660", xerrors = 2)
   @Test def neg_t2994 = compileFile(negDir, "t2994", xerrors = 2)
-  @Test def neg_subtyping = compileFile(negDir, "subtyping", xerrors = 4)
+  @Test def neg_subtyping = compileFile(negDir, "subtyping", xerrors = 5)
   @Test def neg_variances = compileFile(negDir, "variances", xerrors = 2)
   @Test def neg_badAuxConstr = compileFile(negDir, "badAuxConstr", xerrors = 2)
   @Test def neg_typetest = compileFile(negDir, "typetest", xerrors = 1)
   @Test def neg_t1569_failedAvoid = compileFile(negDir, "t1569-failedAvoid", xerrors = 1)
+  @Test def neg_clashes = compileFile(negDir, "clashes", xerrors = 2)
   @Test def neg_cycles = compileFile(negDir, "cycles", xerrors = 8)
   @Test def neg_boundspropagation = compileFile(negDir, "boundspropagation", xerrors = 5)
   @Test def neg_refinedSubtyping = compileFile(negDir, "refinedSubtyping", xerrors = 2)
   @Test def neg_i0091_infpaths = compileFile(negDir, "i0091-infpaths", xerrors = 3)
   @Test def neg_i0248_inherit_refined = compileFile(negDir, "i0248-inherit-refined", xerrors = 4)
   @Test def neg_i0281 = compileFile(negDir, "i0281-null-primitive-conforms", xerrors = 3)
+  @Test def neg_i583 = compileFile(negDir, "i0583-skolemize", xerrors = 2)
+  @Test def neg_finalSealed = compileFile(negDir, "final-sealed", xerrors = 2)
+  @Test def neg_i705 = compileFile(negDir, "i705-inner-value-class", xerrors = 7)
   @Test def neg_moduleSubtyping = compileFile(negDir, "moduleSubtyping", xerrors = 4)
   @Test def neg_escapingRefs = compileFile(negDir, "escapingRefs", xerrors = 2)
   @Test def neg_instantiateAbstract = compileFile(negDir, "instantiateAbstract", xerrors = 8)
-  @Test def neg_selfInheritance = compileFile(negDir, "selfInheritance", xerrors = 5)
-
+  @Test def neg_selfInheritance = compileFile(negDir, "selfInheritance", xerrors = 6)
+  @Test def neg_selfreq = compileFile(negDir, "selfreq", xerrors = 4)
+  @Test def neg_shadowedImplicits = compileFile(negDir, "arrayclone-new", xerrors = 2)
+  @Test def neg_traitParamsTyper = compileFile(negDir, "traitParamsTyper", xerrors = 5)
+  @Test def neg_traitParamsMixin = compileFile(negDir, "traitParamsMixin", xerrors = 2)
+  @Test def neg_firstError = compileFile(negDir, "firstError", xerrors = 3)
+  @Test def neg_implicitLowerBound = compileFile(negDir, "implicit-lower-bound", xerrors = 1)
 
   */@Test def run_all = runFiles(runDir)
 /*
 
-  @Test def dotty = compileDir(dottyDir, "tools", "-deep" :: allowDeepSubtypes) // note the -deep argument   // Fails with [error] Test dotc.tests.dotty failed: java.lang.AssertionError: assertion failed: bad cast: op.asInstanceOf[=> Long], took 38.957 sec
+  @Test def dotty = compileDir(dottyDir, "tools", "-deep" :: "-Ycheck-reentrant" :: allowDeepSubtypes ++ twice) // note the -deep argument
 
-  //@Test def dotc_ast = compileDir(dotcDir, "ast")
-  //  @Test def dotc_config = compileDir(dotcDir, "config")
-  //  @Test def dotc_core = compileDir(dotcDir, "core")("-Yno-double-bindings" :: allowDeepSubtypes)// twice omitted to make tests run faster       // Fails with data race error
-
-  // This directory doesn't exist anymore
-  //  @Test def dotc_core_pickling = compileDir(coreDir, "pickling")(allowDeepSubtypes)// twice omitted to make tests run faster
 
     //@Test def dotc_transform = compileDir(dotcDir, "transform")// twice omitted to make tests run faster    // Fails with bad cas:  op.asInstanceOf[=> Long]
 

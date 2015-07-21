@@ -20,6 +20,7 @@ import annotation.unchecked
 import util.Positions._
 import util.{Stats, SimpleMap}
 import util.common._
+import transform.SymUtils._
 import Decorators._
 import Uniques._
 import ErrorReporting.{err, errorType, DiagnosticString}
@@ -49,8 +50,11 @@ object Checking {
         if (cls.is(AbstractOrTrait))
           ctx.error(d"$cls is abstract; cannot be instantiated", pos)
         if (!cls.is(Module)) {
-          val selfType = tp.givenSelfType.asSeenFrom(tref.prefix, cls.owner)
-          if (selfType.exists && !(tp <:< selfType))
+          // Create a synthetic singleton type instance, and check whether
+          // it conforms to the self type of the class as seen from that instance.
+          val stp = SkolemType(tp)
+          val selfType = tref.givenSelfType.asSeenFrom(stp, cls)
+          if (selfType.exists && !(stp <:< selfType))
             ctx.error(d"$tp does not conform to its self type $selfType; cannot be instantiated")
         }
       case _ =>
@@ -252,12 +256,6 @@ trait Checking {
     if (!tp.isStable && !tp.isErroneous)
       ctx.error(d"$tp is not stable", pos)
 
-  /** Check that type `tp` is a legal prefix for '#'.
-   *  @return The type itself
-   */
-  def checkLegalPrefix(tp: Type, selector: Name, pos: Position)(implicit ctx: Context): Unit =
-    if (!tp.isLegalPrefixFor(selector)) ctx.error(d"$tp is not a valid prefix for '# $selector'", pos)
-
  /**  Check that `tp` is a class type with a stable prefix. Also, if `traitReq` is
    *  true check that `tp` is a trait.
    *  Stability checking is disabled in phases after RefChecks.
@@ -334,9 +332,15 @@ trait Checking {
     }
   }
 
-  def checkInstantiatable(cls: ClassSymbol, pos: Position): Unit = {
-    ??? // to be done in later phase: check that class `cls` is legal in a new.
-  }
+  def checkParentCall(call: Tree, caller: ClassSymbol)(implicit ctx: Context) =
+    if (!ctx.isAfterTyper) {
+      val called = call.tpe.classSymbol
+      if (caller is Trait)
+        ctx.error(i"$caller may not call constructor of $called", call.pos)
+      else if (called.is(Trait) && !caller.mixins.contains(called))
+        ctx.error(i"""$called is already implemented by super${caller.superClass},
+                   |its constructor cannot be called again""".stripMargin, call.pos)
+    }
 }
 
 trait NoChecking extends Checking {
@@ -345,9 +349,9 @@ trait NoChecking extends Checking {
   override def checkValue(tree: Tree, proto: Type)(implicit ctx: Context): tree.type = tree
   override def checkBounds(args: List[tpd.Tree], poly: PolyType)(implicit ctx: Context): Unit = ()
   override def checkStable(tp: Type, pos: Position)(implicit ctx: Context): Unit = ()
-  override def checkLegalPrefix(tp: Type, selector: Name, pos: Position)(implicit ctx: Context): Unit = ()
   override def checkClassTypeWithStablePrefix(tp: Type, pos: Position, traitReq: Boolean)(implicit ctx: Context): Type = tp
   override def checkImplicitParamsNotSingletons(vparamss: List[List[ValDef]])(implicit ctx: Context): Unit = ()
   override def checkFeasible(tp: Type, pos: Position, where: => String = "")(implicit ctx: Context): Type = tp
   override def checkNoDoubleDefs(cls: Symbol)(implicit ctx: Context): Unit = ()
+  override def checkParentCall(call: Tree, caller: ClassSymbol)(implicit ctx: Context) = ()
 }

@@ -136,7 +136,7 @@ object Flags {
   private final val FirstNotPickledFlag = 48
   private final val MaxFlag = 63
 
-  private var flagName = Array.fill(64, 2)("")
+  private val flagName = Array.fill(64, 2)("")
 
   private def isDefinedAsFlag(idx: Int) = flagName(idx) exists (_.nonEmpty)
 
@@ -388,7 +388,7 @@ object Flags {
   /** Symbol is a self name */
   final val SelfName = termFlag(54, "<selfname>")
 
-  /** Symbol is an implementation class */
+  /** Symbol is an implementation class of a Scala2 trait */
   final val ImplClass = typeFlag(54, "<implclass>")
 
   final val SelfNameOrImplClass = SelfName.toCommonFlags
@@ -427,7 +427,7 @@ object Flags {
 
   /** Flags representing modifiers that can appear in trees */
   final val ModifierFlags =
-    SourceModifierFlags | Module | Param | Synthetic | Package | Local
+    SourceModifierFlags | Module | Param | Synthetic | Package | Local | commonFlags(Mutable)
       // | Trait is subsumed by commonFlags(Lazy) from SourceModifierFlags
 
   assert(ModifierFlags.isTermFlags && ModifierFlags.isTypeFlags)
@@ -466,6 +466,8 @@ object Flags {
 
   /** Pure interfaces always have these flags */
   final val PureInterfaceCreationFlags = Trait | NoInits | PureInterface
+
+  final val NoInitsInterface = NoInits | PureInterface
 
   /** The flags of the self symbol */
   final val SelfSymFlags = Private | Local | Deferred
@@ -520,11 +522,17 @@ object Flags {
   /** A private method */
   final val PrivateMethod = allOf(Private, Method)
 
+  /** A private accessor */
+  final val PrivateAccessor = allOf(Private, Accessor)
+
   /** A type parameter with synthesized name */
   final val ExpandedTypeParam = allOf(ExpandedName, TypeParam)
 
   /** A parameter or parameter accessor */
   final val ParamOrAccessor = Param | ParamAccessor
+
+  /** A lazy or deferred value */
+  final val LazyOrDeferred = Lazy | Deferred
 
   /** A type parameter or type parameter accessor */
   final val TypeParamOrAccessor = TypeParam | TypeParamAccessor

@@ -15,6 +15,8 @@ import annotation.tailrec
 import ErrorReporting._
 import tpd.ListOfTreeDecorator
 import config.Printers._
+import Annotations._
+import transform.ValueClasses._
 import language.implicitConversions
 
 trait NamerContextOps { this: Context =>
@@ -238,22 +240,26 @@ class Namer { typer: Typer =>
 
     typr.println(i"creating symbol for $tree in ${ctx.mode}")
 
-    def checkNoConflict(name: Name): Unit = {
-      def preExisting = ctx.effectiveScope.lookup(name)
-      if (ctx.owner is PackageClass) {
-        if (preExisting.isDefinedInCurrentRun)
-          ctx.error(s"${preExisting.showLocated} is compiled twice, runid = ${ctx.runId}", tree.pos)
-        }
-      else if ((!ctx.owner.isClass || name.isTypeName) && preExisting.exists) {
-        ctx.error(i"$name is already defined as $preExisting", tree.pos)
+    def checkNoConflict(name: Name): Name = {
+      def errorName(msg: => String) = {
+        ctx.error(msg, tree.pos)
+        name.freshened
       }
+      def preExisting = ctx.effectiveScope.lookup(name)
+      if (ctx.owner is PackageClass)
+        if (preExisting.isDefinedInCurrentRun)
+          errorName(s"${preExisting.showLocated} is compiled twice")
+        else name
+      else
+        if ((!ctx.owner.isClass || name.isTypeName) && preExisting.exists)
+          errorName(i"$name is already defined as $preExisting")
+        else name
     }
 
     val inSuperCall = if (ctx.mode is Mode.InSuperCall) InSuperCall else EmptyFlags
     tree match {
       case tree: TypeDef if tree.isClassDef =>
-        val name = tree.name.encode.asTypeName
-        checkNoConflict(name)
+        val name = checkNoConflict(tree.name.encode).asTypeName
         val cls = record(ctx.newClassSymbol(
           ctx.owner, name, tree.mods.flags | inSuperCall,
           cls => adjustIfModule(new ClassCompleter(cls, tree)(ctx), tree),
@@ -261,8 +267,7 @@ class Namer { typer: Typer =>
         cls.completer.asInstanceOf[ClassCompleter].init()
         cls
       case tree: MemberDef =>
-        val name = tree.name.encode
-        checkNoConflict(name)
+        val name = checkNoConflict(tree.name.encode)
         val isDeferred = lacksDefinition(tree)
         val deferred = if (isDeferred) Deferred else EmptyFlags
         val method = if (tree.isInstanceOf[DefDef]) Method else EmptyFlags
@@ -495,8 +500,23 @@ class Namer { typer: Typer =>
       completeInCreationContext(denot)
     }
 
-    def completeInCreationContext(denot: SymDenotation): Unit =
+    protected def addAnnotations(denot: SymDenotation): Unit = original match {
+      case original: untpd.MemberDef =>
+        for (annotTree <- untpd.modsDeco(original).mods.annotations) {
+          val cls = typedAheadAnnotation(annotTree)
+          val ann = Annotation.deferred(cls, implicit ctx => typedAnnotation(annotTree))
+          denot.addAnnotation(ann)
+        }
+      case _ =>
+    }
+
+    /** Intentionally left without `implicit ctx` parameter. We need
+     *  to pick up the context at the point where the completer was created.
+     */
+    def completeInCreationContext(denot: SymDenotation): Unit = {
       denot.info = typeSig(denot.symbol)
+      addAnnotations(denot)
+    }
   }
 
   class ClassCompleter(cls: ClassSymbol, original: TypeDef)(ictx: Context) extends Completer(original)(ictx) {
@@ -563,7 +583,10 @@ class Namer { typer: Typer =>
 
       index(rest)(inClassContext(selfInfo))
       denot.info = ClassInfo(cls.owner.thisType, cls, parentRefs, decls, selfInfo)
-      if (impl.body forall isNoInitMember) cls.setFlag(NoInits)
+      addAnnotations(denot)
+      if (isDerivedValueClass(cls)) cls.setFlag(Final)
+      cls.setApplicableFlags(
+        (NoInitsInterface /: impl.body)((fs, stat) => fs & defKind(stat)))
     }
   }
 
@@ -584,6 +607,13 @@ class Namer { typer: Typer =>
 
   def typedAheadExpr(tree: Tree, pt: Type = WildcardType)(implicit ctx: Context): tpd.Tree =
     typedAheadImpl(tree, pt)(ctx retractMode Mode.PatternOrType)
+
+  def typedAheadAnnotation(tree: Tree)(implicit ctx: Context): Symbol = tree match {
+    case Apply(fn, _) => typedAheadAnnotation(fn)
+    case TypeApply(fn, _) => typedAheadAnnotation(fn)
+    case Select(qual, nme.CONSTRUCTOR) => typedAheadAnnotation(qual)
+    case New(tpt) => typedAheadType(tpt).tpe.classSymbol
+  }
 
   /** Enter and typecheck parameter list */
   def completeParams(params: List[MemberDef])(implicit ctx: Context) = {
@@ -676,8 +706,9 @@ class Namer { typer: Typer =>
 
       // println(s"final inherited for $sym: ${inherited.toString}") !!!
       // println(s"owner = ${sym.owner}, decls = ${sym.owner.info.decls.show}")
-      val rhsCtx = ctx.fresh addMode Mode.InferringReturnType
-      def rhsType = typedAheadExpr(mdef.rhs, rhsProto)(rhsCtx).tpe.widen.approximateUnion
+      val rhsCtx = ctx.addMode(Mode.InferringReturnType)
+      def rhsType = ctx.deskolemize(
+        typedAheadExpr(mdef.rhs, rhsProto)(rhsCtx).tpe.widen.approximateUnion)
       def lhsType = fullyDefinedType(rhsType, "right-hand side", mdef.pos)
       if (inherited.exists) inherited
       else {

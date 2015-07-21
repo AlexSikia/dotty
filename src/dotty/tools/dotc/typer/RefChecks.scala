@@ -71,14 +71,27 @@ object RefChecks {
     }
   }
 
-  /** Check that self type of this class conforms to self types of parents */
-  private def checkSelfType(clazz: Symbol)(implicit ctx: Context): Unit = clazz.info match {
+  /** Check that final and sealed restrictions on class parents
+   *  and that self type of this class conforms to self types of parents.
+   *  and required classes.
+   */
+  private def checkParents(cls: Symbol)(implicit ctx: Context): Unit = cls.info match {
     case cinfo: ClassInfo =>
-      for (parent <- cinfo.classParents) {
-        val pself = parent.givenSelfType.asSeenFrom(clazz.thisType, parent.classSymbol)
-        if (pself.exists && !(cinfo.selfType <:< pself))
-          ctx.error(d"illegal inheritance: self type ${cinfo.selfType} of $clazz does not conform to self type $pself of parent ${parent.classSymbol}", clazz.pos)
+      def checkSelfConforms(other: TypeRef, category: String, relation: String) = {
+        val otherSelf = other.givenSelfType.asSeenFrom(cls.thisType, other.classSymbol)
+        if (otherSelf.exists && !(cinfo.selfType <:< otherSelf))
+          ctx.error(d"$category: self type ${cinfo.selfType} of $cls does not conform to self type $otherSelf of $relation ${other.classSymbol}", cls.pos)
       }
+      for (parent <- cinfo.classParents) {
+        val pclazz = parent.classSymbol
+        if (pclazz.is(Final))
+          ctx.error(d"cannot extend final $pclazz", cls.pos)
+        if (pclazz.is(Sealed) && pclazz.associatedFile != cls.associatedFile)
+          ctx.error(d"cannot extend sealed $pclazz in different compilation unit", cls.pos)
+        checkSelfConforms(parent, "illegal inheritance", "parent")
+      }
+      for (reqd <- cinfo.givenSelfType.classSymbols)
+        checkSelfConforms(reqd.typeRef, "missing requirement", "required")
     case _ =>
   }
 
@@ -420,7 +433,7 @@ object RefChecks {
         for (member <- missing) {
           val memberSym = member.symbol
           def undefined(msg: String) =
-            abstractClassError(false, member.showDcl + " is not defined" + msg)
+            abstractClassError(false, s"${member.showDcl} is not defined $msg")
           val underlying = memberSym.underlyingSymbol
 
           // Give a specific error message for abstract vars based on why it fails:
@@ -456,9 +469,8 @@ object RefChecks {
                   case (pa, pc) :: Nil =>
                     val abstractSym = pa.typeSymbol
                     val concreteSym = pc.typeSymbol
-                    def subclassMsg(c1: Symbol, c2: Symbol) = (
-                      ": %s is a subclass of %s, but method parameter types must match exactly.".format(
-                        c1.showLocated, c2.showLocated))
+                    def subclassMsg(c1: Symbol, c2: Symbol) =
+                      s": ${c1.showLocated} is a subclass of ${c2.showLocated}, but method parameter types must match exactly."
                     val addendum =
                       if (abstractSym == concreteSym) {
                         val paArgs = pa.argInfos
@@ -478,12 +490,14 @@ object RefChecks {
                         subclassMsg(concreteSym, abstractSym)
                       else ""
 
-                    undefined("\n(Note that %s does not match %s%s)".format(pa, pc, addendum))
+                    undefined(s"\n(Note that $pa does not match $pc$addendum)")
                   case xs =>
-                    undefined("")
+                    undefined(s"\n(The class implements a member with a different type: ${concrete.showDcl})")
                 }
-              case _ =>
+              case Nil =>
                 undefined("")
+              case concretes =>
+                undefined(s"\n(The class implements members with different types: ${concretes.map(_.showDcl)}%\n  %)")
             }
           } else undefined("")
         }
@@ -647,13 +661,27 @@ object RefChecks {
   }
 
   /** Verify classes extending AnyVal meet the requirements */
-  private def checkAnyValSubclass(clazz: Symbol)(implicit ctx: Context) =
+  private def checkDerivedValueClass(clazz: Symbol, stats: List[Tree])(implicit ctx: Context) = {
+    def checkValueClassMember(stat: Tree) = stat match {
+      case _: ValDef if !stat.symbol.is(ParamAccessor) =>
+        ctx.error(s"value class may not define non-parameter field", stat.pos)
+      case _: DefDef if stat.symbol.isConstructor =>
+        ctx.error(s"value class may not define secondary constructor", stat.pos)
+      case _: MemberDef | _: Import | EmptyTree =>
+      // ok
+      case _ =>
+        ctx.error(s"value class may not contain initialization statements", stat.pos)
+    }
     if (isDerivedValueClass(clazz)) {
       if (clazz.is(Trait))
         ctx.error("Only classes (not traits) are allowed to extend AnyVal", clazz.pos)
-      else if (clazz.is(Abstract))
+      if (clazz.is(Abstract))
         ctx.error("`abstract' modifier cannot be used with value classes", clazz.pos)
+      if (!clazz.isStatic)
+        ctx.error("value class cannot be an inner class", clazz.pos)
+      stats.foreach(checkValueClassMember)
     }
+  }
 
   type LevelAndIndex = immutable.Map[Symbol, (LevelInfo, Int)]
 
@@ -700,7 +728,7 @@ import RefChecks._
  *  - only one overloaded alternative defines default arguments
  *  - applyDynamic methods are not overloaded
  *  - all overrides conform to rules laid down by `checkAllOverrides`.
- *  - any value classes conform to rules laid down by `checkAnyValSubClass`.
+ *  - any value classes conform to rules laid down by `checkDerivedValueClass`.
  *  - this(...) constructor calls do not forward reference other definitions in their block (not even lazy vals).
  *  - no forward reference in a local block jumps over a non-lazy val definition.
  *  - a class and its companion object do not both define a class or module with the same name.
@@ -767,10 +795,10 @@ class RefChecks extends MiniPhase { thisTransformer =>
     override def transformTemplate(tree: Template)(implicit ctx: Context, info: TransformerInfo) = {
       val cls = ctx.owner
       checkOverloadedRestrictions(cls)
-      checkSelfType(cls)
+      checkParents(cls)
       checkCompanionNameClashes(cls)
       checkAllOverrides(cls)
-      checkAnyValSubclass(cls)
+      checkDerivedValueClass(cls, tree.body)
       tree
     }
 

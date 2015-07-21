@@ -157,9 +157,16 @@ class DottyBackendInterface()(implicit ctx: Context) extends BackendInterface{
   }.toMap
   def unboxMethods: Map[Symbol, Symbol] = defn.ScalaValueClasses.map(x => (x, Erasure.Boxing.unboxMethod(x.asClass))).toMap
 
-  private val mkArrayNames: Set[String] = Set("Byte", "Float", "Char", "Double", "Boolean", "Unit", "Long", "Int", "Short", "Ref")
+  private val mkArrayNames: Set[Name] = Set("Byte", "Float", "Char", "Double", "Boolean", "Unit", "Long", "Int", "Short", "Ref").map{ x=>
+    ("new" + x + "Array").toTermName
+  }
 
-  override lazy val syntheticArrayConstructors: Set[Symbol] = mkArrayNames.map(nm => ctx.requiredMethod(toDenot(defn.DottyArraysModule).moduleClass.asClass, s"new${nm}Array"))
+  val dottyArraysModuleClass = toDenot(defn.DottyArraysModule).moduleClass.asClass
+
+
+  override def isSyntheticArrayConstructor(s: Symbol) = {
+    (toDenot(s).maybeOwner eq dottyArraysModuleClass) && mkArrayNames.contains(s.name)
+  }
 
   def isBox(sym: Symbol): Boolean = Erasure.Boxing.isBox(sym)
   def isUnbox(sym: Symbol): Boolean = Erasure.Boxing.isUnbox(sym)
@@ -480,7 +487,7 @@ class DottyBackendInterface()(implicit ctx: Context) extends BackendInterface{
 
   implicit def positionHelper(a: Position): PositionHelper = new PositionHelper {
     def isDefined: Boolean = a.exists
-    def line: Int = sourcePos(a).line
+    def line: Int = sourcePos(a).line + 1
     def finalPosition: Position = a
   }
 
@@ -614,7 +621,7 @@ class DottyBackendInterface()(implicit ctx: Context) extends BackendInterface{
     def hasModuleFlag: Boolean = sym is Flags.Module
     def isSynchronized: Boolean = sym is Flags.Synchronized
     def isNonBottomSubClass(other: Symbol): Boolean = sym.derivesFrom(other)
-    def hasAnnotation(sym: Symbol): Boolean = false
+    def hasAnnotation(ann: Symbol): Boolean = toDenot(sym).hasAnnotation(ann)
     def shouldEmitForwarders: Boolean =  //exitingPickler { !(sym.name.toString contains '$')
       (sym is Flags.Module) && !(sym is Flags.ImplClass) /// !sym.isNestedClass
     def isJavaEntryPoint: Boolean = CollectEntryPoints.isJavaEntryPoint(sym)

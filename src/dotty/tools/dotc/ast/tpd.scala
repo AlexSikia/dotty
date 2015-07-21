@@ -76,8 +76,13 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
   def Block(stats: List[Tree], expr: Tree)(implicit ctx: Context): Block =
     ta.assignType(untpd.Block(stats, expr), stats, expr)
 
-  def maybeBlock(stats: List[Tree], expr: Tree)(implicit ctx: Context): Tree =
-    if (stats.isEmpty) expr else Block(stats, expr)
+  /** Join `stats` in front of `expr` creating a new block if necessary */
+  def seq(stats: List[Tree], expr: Tree)(implicit ctx: Context): Tree =
+    if (stats.isEmpty) expr
+    else expr match {
+      case Block(estats, eexpr) => cpy.Block(expr)(stats ::: estats, eexpr)
+      case _ => Block(stats, expr)
+    }
 
   def If(cond: Tree, thenp: Tree, elsep: Tree)(implicit ctx: Context): If =
     ta.assignType(untpd.If(cond, thenp, elsep), thenp, elsep)
@@ -302,7 +307,7 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
         true
       case pre: ThisType =>
         pre.cls.isStaticOwner ||
-          tp.symbol.is(ParamOrAccessor) && ctx.owner.enclosingClass == pre.cls
+          tp.symbol.is(ParamOrAccessor) && !pre.cls.is(Trait) && ctx.owner.enclosingClass == pre.cls
           // was ctx.owner.enclosingClass.derivesFrom(pre.cls) which was not tight enough
           // and was spuriously triggered in case inner class would inherit from outer one
           // eg anonymous TypeMap inside TypeMap.andThen
@@ -326,22 +331,23 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
   def ref(tp: NamedType)(implicit ctx: Context): Tree =
     if (tp.isType) TypeTree(tp)
     else if (prefixIsElidable(tp)) Ident(tp)
+    else if (tp.symbol.is(Module) && ctx.owner.isContainedIn(tp.symbol.moduleClass))
+      followOuterLinks(This(tp.symbol.moduleClass.asClass))
     else tp.prefix match {
-      case pre: SingletonType =>
-        val prefix =
-          singleton(pre) match {
-            case t: This if ctx.erasedTypes && !(t.symbol == ctx.owner.enclosingClass || t.symbol.isStaticOwner) =>
-              // after erasure outer paths should be respected
-              new ExplicitOuter.OuterOps(ctx).path(t.tpe.widen.classSymbol)
-            case t =>
-              t
-          }
-        prefix.select(tp)
+      case pre: SingletonType => followOuterLinks(singleton(pre)).select(tp)
       case pre => SelectFromTypeTree(TypeTree(pre), tp)
     } // no checks necessary
 
   def ref(sym: Symbol)(implicit ctx: Context): Tree =
     ref(NamedType(sym.owner.thisType, sym.name, sym.denot))
+
+  private def followOuterLinks(t: Tree)(implicit ctx: Context) = t match {
+    case t: This if ctx.erasedTypes && !(t.symbol == ctx.owner.enclosingClass || t.symbol.isStaticOwner) =>
+      // after erasure outer paths should be respected
+      new ExplicitOuter.OuterOps(ctx).path(t.tpe.widen.classSymbol)
+    case t =>
+      t
+  }
 
   def singleton(tp: Type)(implicit ctx: Context): Tree = tp match {
     case tp: TermRef => ref(tp)
@@ -377,8 +383,9 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
   /** new C(args), calling given constructor `constr` of C */
   def New(tp: Type, constr: TermSymbol, args: List[Tree])(implicit ctx: Context): Apply = {
     val targs = tp.argTypes
-    New(tp withoutArgs targs)
-      .select(TermRef.withSig(tp.normalizedPrefix, constr))
+    val tycon = tp.withoutArgs(targs)
+    New(tycon)
+      .select(TermRef.withSig(tycon, constr))
       .appliedToTypes(targs)
       .appliedToArgs(args)
   }
@@ -417,6 +424,9 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
     val valdef = ValDef(sym, New(modcls.typeRef).select(constrSym).appliedToNone)
     Thicket(valdef, clsdef)
   }
+
+  /** A `_' with given type */
+  def Underscore(tp: Type)(implicit ctx: Context) = untpd.Ident(nme.WILDCARD).withType(tp)
 
   def defaultValue(tpe: Types.Type)(implicit ctx: Context) = {
     val tpw = tpe.widen
@@ -652,9 +662,16 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
      *  is in fact the symbol you would get when you select with the symbol's name,
      *  otherwise a data race may occur which would be flagged by -Yno-double-bindings.
      */
-    def select(sym: Symbol)(implicit ctx: Context): Select =
-      untpd.Select(tree, sym.name).withType(
-        TermRef.withSigAndDenot(tree.tpe, sym.name.asTermName, sym.signature, sym.denot.asSeenFrom(tree.tpe)))
+    def select(sym: Symbol)(implicit ctx: Context): Select = {
+      val tp =
+        if (sym.isType)
+          TypeRef(tree.tpe, sym.name.asTypeName)
+        else
+          TermRef.withSigAndDenot(tree.tpe, sym.name.asTermName,
+            sym.signature, sym.denot.asSeenFrom(tree.tpe))
+      untpd.Select(tree, sym.name)
+        .withType(tp)
+    }
 
     /** A select node with the given selector name and signature and a computed type */
     def selectWithSig(name: Name, sig: Signature)(implicit ctx: Context): Tree =
@@ -719,6 +736,12 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
     /** `tree.asInstanceOf[tp]` unless tree's type already conforms to `tp` */
     def ensureConforms(tp: Type)(implicit ctx: Context): Tree =
       if (tree.tpe <:< tp) tree else asInstance(tp)
+
+    /** If inititializer tree is `_', the default value of its type,
+     *  otherwise the tree itself.
+     */
+    def wildcardToDefault(implicit ctx: Context) =
+      if (isWildcardArg(tree)) defaultValue(tree.tpe) else tree
 
     /** `this && that`, for boolean trees `this`, `that` */
     def and(that: Tree)(implicit ctx: Context): Tree =
@@ -796,15 +819,9 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
     val alternatives = ctx.typer.resolveOverloaded(alts, proto, Nil)
     assert(alternatives.size == 1) // this is parsed from bytecode tree. there's nothing user can do about it
 
-    val prefixTpe =
-      if (method eq nme.CONSTRUCTOR)
-        receiver.tpe.normalizedPrefix // <init> methods are part of the enclosing scope
-      else
-        receiver.tpe
-
     val selected = alternatives.head
     val fun = receiver
-      .select(TermRef.withSig(prefixTpe, selected.termSymbol.asTerm))
+      .select(TermRef.withSig(receiver.tpe, selected.termSymbol.asTerm))
       .appliedToTypes(targs)
 
     def adaptLastArg(lastParam: Tree, expectedType: Type) = {

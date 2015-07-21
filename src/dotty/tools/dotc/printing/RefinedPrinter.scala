@@ -148,7 +148,8 @@ class RefinedPrinter(_ctx: Context) extends PlainPrinter(_ctx) {
       case JavaArrayType(elemtp) =>
         return toText(elemtp) ~ "[]"
       case tp: SelectionProto =>
-        return "?{ " ~ toText(tp.name) ~ ": " ~ toText(tp.memberProto) ~ " }"
+        return "?{ " ~ toText(tp.name) ~ (" " provided !tp.name.decode.last.isLetterOrDigit) ~
+          ": " ~ toText(tp.memberProto) ~ " }"
       case tp: ViewProto =>
         return toText(tp.argType) ~ " ?=>? " ~ toText(tp.resultType)
       case tp @ FunProto(args, resultType, _) =>
@@ -172,14 +173,14 @@ class RefinedPrinter(_ctx: Context) extends PlainPrinter(_ctx) {
    *     parent { type Apply = body; argBindings? }
    *
    *  split it into
-   
+   *
    *   - the `parent`
    *   - the simplified `body`
    *   - the bindings HK$ members, if there are any
    *
    *  The body is simplified  as follows
    *   - if it is a TypeAlias, follow it
-   *   - replace all references to of the form <skolem>.HK$i by references
+   *   - replace all references to of the form <refined-this>.HK$i by references
    *     without a prefix, because the latter print nicer.
    *
    */
@@ -190,7 +191,7 @@ class RefinedPrinter(_ctx: Context) extends PlainPrinter(_ctx) {
         // LambdaI{...}.HK$i
         val simplifyArgs = new TypeMap {
           override def apply(tp: Type) = tp match {
-            case tp @ TypeRef(SkolemType(_), name) if name.isLambdaArgName =>
+            case tp @ TypeRef(RefinedThis(_), name) if name.isLambdaArgName =>
               TypeRef(NoPrefix, tp.symbol.asType)
             case _ =>
               mapOver(tp)

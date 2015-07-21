@@ -36,11 +36,11 @@ object Parsers {
     def nonePositive: Boolean = parCounts forall (_ <= 0)
   }
 
-  object Location extends Enumeration {
+  @sharable object Location extends Enumeration {
     val InParens, InBlock, InPattern, ElseWhere = Value
   }
 
-  object ParamOwner extends Enumeration {
+  @sharable object ParamOwner extends Enumeration {
     val Class, Type, TypeParam, Def = Value
   }
 
@@ -192,7 +192,7 @@ object Parsers {
           case _ =>
             if (mustStartStat &&
                 in.isAfterLineEnd() &&
-                isLeqIndented(in.offset, lastStatOffset))
+                isLeqIndented(in.offset, lastStatOffset max 0))
               return
         }
         in.nextToken()

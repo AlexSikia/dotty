@@ -12,6 +12,7 @@ import SymDenotations._
 import typer.FrontEnd
 import Phases.Phase
 import util._
+import reporting.Reporter
 import Decorators._
 import dotty.tools.dotc.transform.Pickler
 import tasty.DottyUnpickler

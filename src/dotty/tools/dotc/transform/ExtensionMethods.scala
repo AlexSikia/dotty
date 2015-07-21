@@ -14,7 +14,7 @@ import core._
 import Phases.Phase
 import Types._, Contexts._, Constants._, Names._, NameOps._, Flags._, DenotTransformers._
 import SymDenotations._, Symbols._, StdNames._, Annotations._, Trees._, Scopes._, Denotations._
-import TypeErasure.{ erasure, ErasedValueType }
+import TypeErasure.{ valueErasure, ErasedValueType }
 import TypeUtils._
 import util.Positions._
 import Decorators._
@@ -65,7 +65,7 @@ class ExtensionMethods extends MiniPhaseTransform with DenotTransformer with Ful
               }
             }
 
-            val underlying = erasure(underlyingOfValueClass(valueClass))
+            val underlying = valueErasure(underlyingOfValueClass(valueClass))
             val evt = ErasedValueType(valueClass, underlying)
             val u2evtSym = ctx.newSymbol(moduleSym, nme.U2EVT, Synthetic | Method,
               MethodType(List(nme.x_0), List(underlying), evt))
@@ -117,7 +117,7 @@ class ExtensionMethods extends MiniPhaseTransform with DenotTransformer with Ful
       imeth.flags | Final &~ (Override | Protected | AbsOverride),
       fullyParameterizedType(imeth.info, imeth.owner.asClass),
       privateWithin = imeth.privateWithin, coord = imeth.coord)
-    extensionMeth.addAnnotations(from = imeth)(ctx.withPhase(thisTransformer))
+    extensionMeth.addAnnotations(imeth.annotations)(ctx.withPhase(thisTransformer))
       // need to change phase to add tailrec annotation which gets removed from original method in the same phase.
     extensionMeth
   }

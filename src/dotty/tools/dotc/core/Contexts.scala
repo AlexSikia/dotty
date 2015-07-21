@@ -28,6 +28,7 @@ import printing._
 import config.{Settings, ScalaSettings, Platform, JavaPlatform}
 import language.implicitConversions
 import DenotTransformers.DenotTransformer
+
 object Contexts {
 
   /** A context is passed basically everywhere in dotc.
@@ -231,6 +232,9 @@ object Contexts {
     final def withPhase(phase: Phase): Context =
       withPhase(phase.id)
 
+    final def withPhaseNoLater(phase: Phase) =
+      if (ctx.phase.id > phase.id) withPhase(phase) else ctx
+
     /** If -Ydebug is on, the top of the stack trace where this context
      *  was created, otherwise `null`.
      */
@@ -383,13 +387,6 @@ object Contexts {
     final def withOwner(owner: Symbol): Context =
       if (owner ne this.owner) fresh.setOwner(owner) else this
 
-    final def withMode(mode: Mode): Context =
-      if (mode != this.mode) fresh.setMode(mode) else this
-
-    final def addMode(mode: Mode): Context = withMode(this.mode | mode)
-    final def maskMode(mode: Mode): Context = withMode(this.mode & mode)
-    final def retractMode(mode: Mode): Context = withMode(this.mode &~ mode)
-
     override def toString =
       "Context(\n" +
       (outersIterator map ( ctx => s"  owner = ${ctx.owner}, scope = ${ctx.scope}") mkString "\n")
@@ -441,6 +438,21 @@ object Contexts {
     def setDebug = setSetting(base.settings.debug, true)
   }
 
+  implicit class ModeChanges(val c: Context) extends AnyVal {
+    final def withMode(mode: Mode): Context =
+      if (mode != c.mode) c.fresh.setMode(mode) else c
+
+    final def addMode(mode: Mode): Context = withMode(c.mode | mode)
+    final def maskMode(mode: Mode): Context = withMode(c.mode & mode)
+    final def retractMode(mode: Mode): Context = withMode(c.mode &~ mode)
+  }
+
+  implicit class FreshModeChanges(val c: FreshContext) extends AnyVal {
+    final def addMode(mode: Mode): c.type = c.setMode(c.mode | mode)
+    final def maskMode(mode: Mode): c.type = c.setMode(c.mode & mode)
+    final def retractMode(mode: Mode): c.type = c.setMode(c.mode &~ mode)
+  }
+
   /** A class defining the initial context with given context base
    *  and set of possible settings.
    */
@@ -462,7 +474,7 @@ object Contexts {
     gadt = new GADTMap(SimpleMap.Empty)
   }
 
-  object NoContext extends Context {
+  @sharable object NoContext extends Context {
     lazy val base = unsupported("base")
     override val implicits: ContextualImplicits = new ContextualImplicits(Nil, null)(this)
   }
@@ -609,7 +621,7 @@ object Contexts {
     /** implicit conversion that injects all ContextBase members into a context */
     implicit def toBase(ctx: Context): ContextBase = ctx.base
 
-    val theBase = new ContextBase // !!! DEBUG, so that we can use a minimal context for reporting even in code that normally cannot access a context
+    // @sharable val theBase = new ContextBase // !!! DEBUG, so that we can use a minimal context for reporting even in code that normally cannot access a context
   }
 
   /** Info that changes on each compiler run */

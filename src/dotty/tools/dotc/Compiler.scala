@@ -7,7 +7,7 @@ import Periods._
 import Symbols._
 import Scopes._
 import typer.{FrontEnd, Typer, Mode, ImportInfo, RefChecks}
-import reporting.ConsoleReporter
+import reporting.{Reporter, ConsoleReporter}
 import Phases.Phase
 import dotty.tools.dotc.transform._
 import dotty.tools.dotc.transform.TreeTransforms.{TreeTransform, TreeTransformer}
@@ -40,44 +40,47 @@ class Compiler {
       List(new FrontEnd),
       List(new PostTyper),
       List(new Pickler),
-      List(new FirstTransform),
+      List(new FirstTransform,
+           new CheckReentrant),
       List(new PreSpecializer,
            new RefChecks,
            new ElimRepeated,
            new NormalizeFlags,
            new ExtensionMethods,
            new ExpandSAMs,
-           new TailRec),
+           new TailRec,
+           new ClassOf),
       List(new PatternMatcher,
            new ExplicitOuter,
            new Splitter),
       List(new TypeSpecializer),
-      List(new SeqLiterals,
+      List(new VCInlineMethods,
+           new SeqLiterals,
            new InterceptedMethods,
            new Literalize,
            new Getters,
            new ClassTags,
            new ElimByName,
+           new AugmentScala2Traits,
            new ResolveSuper),
       List(new Erasure),
       List(new ElimErasedValueType,
-           new VCInline,
+           new VCElideAllocations,
            new Mixin,
            new LazyVals,
            new Memoize,
+           new LinkScala2ImplClasses,
            new CapturedVars, // capturedVars has a transformUnit: no phases should introduce local mutable vars here
            new Constructors,
            new FunctionalInterfaces),
       List(new LambdaLift,   // in this mini-phase block scopes are incorrect. No phases that rely on scopes should be here
-           new Flatten,
            new ElimStaticThis,
+           new Flatten,
            new RestoreScopes),
       List(/*new PrivateToStatic,*/
            new ExpandPrivate,
            new CollectEntryPoints,
-           new LabelDefs,
-           new ElimWildcardIdents,
-           new TraitConstructors),
+           new LabelDefs),
       List(new GenBCode)
     )
 
@@ -106,12 +109,14 @@ class Compiler {
       .setOwner(defn.RootClass)
       .setTyper(new Typer)
       .setMode(Mode.ImplicitsEnabled)
-      .setTyperState(new MutableTyperState(ctx.typerState, new ConsoleReporter()(ctx), isCommittable = true))
+      .setTyperState(new MutableTyperState(ctx.typerState, rootReporter(ctx), isCommittable = true))
     ctx.definitions.init(start) // set context of definitions to start
     def addImport(ctx: Context, symf: () => Symbol) =
       ctx.fresh.setImportInfo(ImportInfo.rootImport(symf)(ctx))
     (start.setRunInfo(new RunInfo(start)) /: defn.RootImportFns)(addImport)
   }
+
+  protected def rootReporter(implicit ctx: Context): Reporter = new ConsoleReporter()(ctx)
 
   def reset()(implicit ctx: Context): Unit = {
     ctx.base.reset()

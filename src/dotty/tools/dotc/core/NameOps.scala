@@ -6,7 +6,7 @@ import scala.annotation.switch
 import scala.io.Codec
 import Names._, dotty.tools.dotc.core.StdNames._, Contexts._, Symbols._, Flags._
 import Decorators.StringDecorator
-import dotty.tools.dotc.util.Chars
+import util.{Chars, NameTransformer}
 import Chars.isOperatorPart
 
 object NameOps {
@@ -59,10 +59,10 @@ object NameOps {
   implicit class NameDecorator[N <: Name](val name: N) extends AnyVal {
     import nme._
 
-    def likeTyped(n: Name): N =
+    def likeTyped(n: PreName): N =
       (if (name.isTermName) n.toTermName else n.toTypeName).asInstanceOf[N]
 
-    def isConstructorName = name == CONSTRUCTOR || name == IMPLCLASS_CONSTRUCTOR
+    def isConstructorName = name == CONSTRUCTOR || name == TRAIT_CONSTRUCTOR
     def isExceptionResultName = name startsWith EXCEPTION_RESULT_PREFIX
     def isImplClassName = name endsWith IMPL_CLASS_SUFFIX
     def isLocalDummyName = name startsWith LOCALDUMMY_PREFIX
@@ -155,13 +155,17 @@ object NameOps {
 
     /** The expanded name of `name` relative to given class `base`.
      */
-    def expandedName(base: Symbol)(implicit ctx: Context): N =
-      expandedName(if (base is Flags.ExpandedName) base.name else base.fullNameSeparated("$"))
+    def expandedName(base: Symbol, separator: Name)(implicit ctx: Context): N =
+      expandedName(if (base is Flags.ExpandedName) base.name else base.fullNameSeparated("$"), separator)
+
+    def expandedName(base: Symbol)(implicit ctx: Context): N = expandedName(base, nme.EXPAND_SEPARATOR)
 
     /** The expanded name of `name` relative to `basename` with given `separator`
      */
-    def expandedName(prefix: Name): N =
-      name.fromName(prefix ++ nme.EXPAND_SEPARATOR ++ name).asInstanceOf[N]
+    def expandedName(prefix: Name, separator: Name = nme.EXPAND_SEPARATOR): N =
+      name.fromName(prefix ++ separator ++ name).asInstanceOf[N]
+
+    def expandedName(prefix: Name): N = expandedName(prefix, nme.EXPAND_SEPARATOR)
 
     def unexpandedName: N = {
       val idx = name.lastIndexOfSlice(nme.EXPAND_SEPARATOR)
@@ -177,6 +181,13 @@ object NameOps {
     def shadowedName: N = likeTyped(nme.SHADOWED ++ name)
 
     def revertShadowed: N = likeTyped(name.drop(nme.SHADOWED.length))
+
+    def implClassName: N = likeTyped(name ++ tpnme.IMPL_CLASS_SUFFIX)
+
+    def freshened(implicit ctx: Context): N =
+      likeTyped(
+        if (name.isModuleClassName) name.stripModuleClassSuffix.freshened.moduleClassName
+        else likeTyped(ctx.freshName(name ++ NameTransformer.NAME_JOIN_STRING)))
 
     /** Translate a name into a list of simple TypeNames and TermNames.
      *  In all segments before the last, type/term is determined by whether

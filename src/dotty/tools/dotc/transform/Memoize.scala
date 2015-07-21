@@ -42,12 +42,6 @@ import Decorators._
    */
   override def runsAfter: Set[Class[_ <: Phase]] = Set(classOf[Mixin])
 
-  override def checkPostCondition(tree: Tree)(implicit ctx: Context): Unit = tree match {
-    case tree: DefDef if !tree.symbol.is(Lazy | Deferred) =>
-      assert(!tree.rhs.isEmpty, i"unimplemented: $tree")
-    case _ =>
-  }
-
   override def transformDefDef(tree: DefDef)(implicit ctx: Context, info: TransformerInfo): Tree = {
     val sym = tree.symbol
 
@@ -56,13 +50,23 @@ import Decorators._
       name = sym.name.asTermName.fieldName,
       flags = Private | (if (sym is Stable) EmptyFlags else Mutable),
       info = sym.info.resultType,
-      coord = tree.pos).enteredAfter(thisTransform)
+      coord = tree.pos)
+      .withAnnotationsCarrying(sym, defn.FieldMetaAnnot)
+      .enteredAfter(thisTransform)
+
+    /** Can be used to filter annotations on getters and setters; not used yet */
+    def keepAnnotations(denot: SymDenotation, meta: ClassSymbol) = {
+      val cpy = sym.copySymDenotation()
+      cpy.filterAnnotations(_.symbol.derivesFrom(meta))
+      if (cpy.annotations ne denot.annotations) cpy.installAfter(thisTransform)
+    }
 
     lazy val field = sym.field.orElse(newField).asTerm
     if (sym.is(Accessor, butNot = NoFieldNeeded))
       if (sym.isGetter) {
-        tree.rhs.changeOwnerAfter(sym, field, thisTransform)
-        val fieldDef = transformFollowing(ValDef(field, tree.rhs))
+        var rhs = tree.rhs.changeOwnerAfter(sym, field, thisTransform)
+        if (isWildcardArg(rhs)) rhs = EmptyTree
+        val fieldDef = transformFollowing(ValDef(field, rhs))
         val getterDef = cpy.DefDef(tree)(rhs = transformFollowingDeep(ref(field)))
         Thicket(fieldDef, getterDef)
       }

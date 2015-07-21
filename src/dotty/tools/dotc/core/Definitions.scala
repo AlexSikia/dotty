@@ -271,6 +271,16 @@ class Definitions {
   lazy val BoxedFloatClass = ctx.requiredClass("java.lang.Float")
   lazy val BoxedDoubleClass = ctx.requiredClass("java.lang.Double")
 
+  lazy val BoxedBooleanModule = ctx.requiredModule("java.lang.Boolean")
+  lazy val BoxedByteModule    = ctx.requiredModule("java.lang.Byte")
+  lazy val BoxedShortModule   = ctx.requiredModule("java.lang.Short")
+  lazy val BoxedCharModule    = ctx.requiredModule("java.lang.Character")
+  lazy val BoxedIntModule     = ctx.requiredModule("java.lang.Integer")
+  lazy val BoxedLongModule    = ctx.requiredModule("java.lang.Long")
+  lazy val BoxedFloatModule   = ctx.requiredModule("java.lang.Float")
+  lazy val BoxedDoubleModule  = ctx.requiredModule("java.lang.Double")
+  lazy val BoxedVoidModule    = ctx.requiredModule("java.lang.Void")
+
   lazy val ByNameParamClass2x     = specialPolyClass(tpnme.BYNAME_PARAM_CLASS, Covariant, AnyType)
   lazy val EqualsPatternClass     = specialPolyClass(tpnme.EQUALS_PATTERN, EmptyFlags, AnyType)
 
@@ -314,6 +324,7 @@ class Definitions {
   lazy val ProductClass                 = ctx.requiredClass("scala.Product")
     lazy val Product_canEqual = ProductClass.requiredMethod(nme.canEqual_)
     lazy val Product_productArity = ProductClass.requiredMethod(nme.productArity)
+    lazy val Product_productPrefix = ProductClass.requiredMethod(nme.productPrefix)
   lazy val LanguageModuleClass          = ctx.requiredModule("dotty.language").moduleClass.asClass
 
   // Annotation base classes
@@ -347,6 +358,9 @@ class Definitions {
   lazy val UncheckedStableAnnot = ctx.requiredClass("scala.annotation.unchecked.uncheckedStable")
   lazy val UncheckedVarianceAnnot = ctx.requiredClass("scala.annotation.unchecked.uncheckedVariance")
   lazy val VolatileAnnot = ctx.requiredClass("scala.volatile")
+  lazy val FieldMetaAnnot = ctx.requiredClass("scala.annotation.meta.field")
+  lazy val GetterMetaAnnot = ctx.requiredClass("scala.annotation.meta.getter")
+  lazy val SetterMetaAnnot = ctx.requiredClass("scala.annotation.meta.setter")
 
   // convenient one-parameter method types
   def methOfAny(tp: Type) = MethodType(List(AnyType), tp)

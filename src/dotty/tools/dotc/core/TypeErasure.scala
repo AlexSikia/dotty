@@ -110,8 +110,20 @@ object TypeErasure {
   private def erasureCtx(implicit ctx: Context) =
     if (ctx.erasedTypes) ctx.withPhase(ctx.erasurePhase).addMode(Mode.FutureDefsOK) else ctx
 
-  def erasure(tp: Type, semiEraseVCs: Boolean = true)(implicit ctx: Context): Type =
-    erasureFn(isJava = false, semiEraseVCs, isConstructor = false, wildcardOK = false)(tp)(erasureCtx)
+  /** The standard erasure of a Scala type. Value classes are erased as normal classes.
+   *
+   *  @param tp            The type to erase.
+  */
+  def erasure(tp: Type)(implicit ctx: Context): Type =
+    erasureFn(isJava = false, semiEraseVCs = false, isConstructor = false, wildcardOK = false)(tp)(erasureCtx)
+
+  /** The value class erasure of a Scala type, where value classes are semi-erased to
+   *  ErasedValueType (they will be fully erased in [[ElimErasedValueType]]).
+   *
+   *  @param tp            The type to erase.
+   */
+  def valueErasure(tp: Type)(implicit ctx: Context): Type =
+    erasureFn(isJava = false, semiEraseVCs = true, isConstructor = false, wildcardOK = false)(tp)(erasureCtx)
 
   def sigName(tp: Type, isJava: Boolean)(implicit ctx: Context): TypeName = {
     val seqClass = if (isJava) defn.ArrayClass else defn.SeqClass
@@ -134,7 +146,7 @@ object TypeErasure {
     case tp: ThisType =>
       tp
     case tp =>
-      erasure(tp)
+      valueErasure(tp)
   }
 
   /**  The symbol's erased info. This is the type's erasure, except for the following symbols:
@@ -164,7 +176,7 @@ object TypeErasure {
     else if (sym.isConstructor) outer.addParam(sym.owner.asClass, erase(tp)(erasureCtx))
     else erase.eraseInfo(tp, sym)(erasureCtx) match {
       case einfo: MethodType if sym.isGetter && einfo.resultType.isRef(defn.UnitClass) =>
-        MethodType(Nil, Nil, defn.BoxedUnitClass.typeRef)
+        MethodType(Nil, defn.BoxedUnitClass.typeRef)
       case einfo =>
         einfo
     }
@@ -308,12 +320,8 @@ class TypeErasure(isJava: Boolean, semiEraseVCs: Boolean, isConstructor: Boolean
       val parent = tp.parent
       if (parent isRef defn.ArrayClass) eraseArray(tp)
       else this(parent)
-    case tp: TermRef =>
+    case _: TermRef | _: ThisType =>
       this(tp.widen)
-    case tp: ThisType =>
-      def thisTypeErasure(tpToErase: Type) =
-        erasureFn(isJava, semiEraseVCs = false, isConstructor, wildcardOK)(tpToErase)
-      thisTypeErasure(tp.cls.typeRef)
     case SuperType(thistpe, supertpe) =>
       SuperType(this(thistpe), this(supertpe))
     case ExprType(rt) =>
@@ -389,7 +397,7 @@ class TypeErasure(isJava: Boolean, semiEraseVCs: Boolean, isConstructor: Boolean
   private def eraseDerivedValueClassRef(tref: TypeRef)(implicit ctx: Context): Type = {
     val cls = tref.symbol.asClass
     val underlying = underlyingOfValueClass(cls)
-    ErasedValueType(cls, erasure(underlying))
+    ErasedValueType(cls, valueErasure(underlying))
   }
 
 
@@ -431,6 +439,7 @@ class TypeErasure(isJava: Boolean, semiEraseVCs: Boolean, isConstructor: Boolean
     case ErasedValueType(_, underlying) =>
       sigName(underlying)
     case tp: TypeRef =>
+      if (!tp.denot.exists) throw new MissingType(tp.prefix, tp.name)
       val sym = tp.symbol
       if (!sym.isClass) sigName(tp.info)
       else if (isDerivedValueClass(sym)) sigName(eraseDerivedValueClassRef(tp))

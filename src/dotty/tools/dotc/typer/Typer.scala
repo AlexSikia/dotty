@@ -312,13 +312,12 @@ class Typer extends Namer with TypeAssigner with Applications with Implicits wit
     if (ctx.compilationUnit.isJava && tree.name.isTypeName) {
       // SI-3120 Java uses the same syntax, A.B, to express selection from the
       // value A and from the type A. We have to try both.
-      tryEither(tryCtx => asSelect(tryCtx))((_,_) => asJavaSelectFromTypeTree(ctx))
+      tryEither(tryCtx => asSelect(tryCtx))((_, _) => asJavaSelectFromTypeTree(ctx))
     } else asSelect(ctx)
   }
 
   def typedSelectFromTypeTree(tree: untpd.SelectFromTypeTree, pt: Type)(implicit ctx: Context): Tree = track("typedSelectFromTypeTree") {
     val qual1 = typedType(tree.qualifier, selectionProto(tree.name, pt, this))
-    checkLegalPrefix(qual1.tpe, tree.name, qual1.pos)
     assignType(cpy.SelectFromTypeTree(tree)(qual1, tree.name), qual1)
   }
 
@@ -347,8 +346,8 @@ class Typer extends Namer with TypeAssigner with Applications with Implicits wit
         val clsDef = TypeDef(x, templ).withFlags(Final)
         typed(cpy.Block(tree)(clsDef :: Nil, New(Ident(x), Nil)), pt)
       case _ =>
-          val tpt1 = typedType(tree.tpt)
-          checkClassTypeWithStablePrefix(tpt1.tpe, tpt1.pos, traitReq = false)
+        val tpt1 = typedType(tree.tpt)
+        checkClassTypeWithStablePrefix(tpt1.tpe, tpt1.pos, traitReq = false)
         assignType(cpy.New(tree)(tpt1), tpt1)
         // todo in a later phase: checkInstantiatable(cls, tpt1.pos)
     }
@@ -378,10 +377,11 @@ class Typer extends Namer with TypeAssigner with Applications with Implicits wit
     }
     tree.expr match {
       case id: untpd.Ident if (ctx.mode is Mode.Pattern) && isVarPattern(id) =>
-        if (id.name == nme.WILDCARD) regularTyped(isWildcard = true)
+        if (id.name == nme.WILDCARD || id.name == nme.WILDCARD_STAR) regularTyped(isWildcard = true)
         else {
           import untpd._
-          typed(Bind(id.name, Typed(Ident(nme.WILDCARD), tree.tpt)).withPos(id.pos), pt)
+          val name = if (untpd.isWildcardStarArg(tree)) nme.WILDCARD_STAR else nme.WILDCARD
+          typed(Bind(id.name, Typed(Ident(name), tree.tpt)).withPos(id.pos), pt)
         }
       case _ =>
         if (untpd.isWildcardStarArg(tree))
@@ -523,7 +523,6 @@ class Typer extends Namer with TypeAssigner with Applications with Implicits wit
        *  of a typed expression if this is necessary to infer a parameter type.
        */
       var fnBody = tree.body
-
 
       /** If function is of the form
        *      (x1, ..., xN) => f(x1, ..., XN)
@@ -814,7 +813,7 @@ class Typer extends Namer with TypeAssigner with Applications with Implicits wit
       if ((rsym.is(Method) || rsym.isType) && rsym.allOverriddenSymbols.isEmpty)
         ctx.error(i"refinement $rsym without matching type in parent $parent", refinement.pos)
       val rinfo = if (rsym is Accessor) rsym.info.resultType else rsym.info
-      RefinedType(parent, rsym.name, rt => rinfo.substThis(refineCls, SkolemType(rt)))
+      RefinedType(parent, rsym.name, rt => rinfo.substThis(refineCls, RefinedThis(rt)))
       // todo later: check that refinement is within bounds
     }
     val res = cpy.RefinedTypeTree(tree)(tpt1, refinements1) withType
@@ -861,15 +860,11 @@ class Typer extends Namer with TypeAssigner with Applications with Implicits wit
     assignType(cpy.Alternative(tree)(trees1), trees1)
   }
 
-  def addTypedModifiersAnnotations(mdef: untpd.MemberDef, sym: Symbol)(implicit ctx: Context): Unit = {
-    val mods1 = typedModifiers(untpd.modsDeco(mdef).mods, sym)
-    for (tree <- mods1.annotations) sym.addAnnotation(Annotation(tree))
-  }
-
-  def typedModifiers(mods: untpd.Modifiers, sym: Symbol)(implicit ctx: Context): Modifiers = track("typedModifiers") {
-    val annotations1 = mods.annotations mapconserve typedAnnotation
-    if (annotations1 eq mods.annotations) mods.asInstanceOf[Modifiers]
-    else Modifiers(mods.flags, mods.privateWithin, annotations1)
+  def completeAnnotations(mdef: untpd.MemberDef, sym: Symbol)(implicit ctx: Context): Unit = {
+    // necessary to force annotation trees to be computed.
+    sym.annotations.foreach(_.tree)
+    // necessary in order to mark the typed ahead annotations as definitiely typed:
+    untpd.modsDeco(mdef).mods.annotations.mapconserve(typedAnnotation)
   }
 
   def typedAnnotation(annot: untpd.Tree)(implicit ctx: Context): Tree = track("typedAnnotation") {
@@ -878,7 +873,7 @@ class Typer extends Namer with TypeAssigner with Applications with Implicits wit
 
   def typedValDef(vdef: untpd.ValDef, sym: Symbol)(implicit ctx: Context) = track("typedValDef") {
     val ValDef(name, tpt, _) = vdef
-    addTypedModifiersAnnotations(vdef, sym)
+    completeAnnotations(vdef, sym)
     val tpt1 = typedType(tpt)
     val rhs1 = vdef.rhs match {
       case rhs @ Ident(nme.WILDCARD) => rhs withType tpt1.tpe
@@ -889,7 +884,7 @@ class Typer extends Namer with TypeAssigner with Applications with Implicits wit
 
   def typedDefDef(ddef: untpd.DefDef, sym: Symbol)(implicit ctx: Context) = track("typedDefDef") {
     val DefDef(name, tparams, vparamss, tpt, _) = ddef
-    addTypedModifiersAnnotations(ddef, sym)
+    completeAnnotations(ddef, sym)
     val tparams1 = tparams mapconserve (typed(_).asInstanceOf[TypeDef])
     val vparamss1 = vparamss nestedMapconserve (typed(_).asInstanceOf[ValDef])
     if (sym is Implicit) checkImplicitParamsNotSingletons(vparamss1)
@@ -901,7 +896,7 @@ class Typer extends Namer with TypeAssigner with Applications with Implicits wit
 
   def typedTypeDef(tdef: untpd.TypeDef, sym: Symbol)(implicit ctx: Context): Tree = track("typedTypeDef") {
     val TypeDef(name, rhs) = tdef
-    addTypedModifiersAnnotations(tdef, sym)
+    completeAnnotations(tdef, sym)
     val _ = typedType(rhs) // unused, typecheck only to remove from typedTree
     assignType(cpy.TypeDef(tdef)(name, TypeTree(sym.info), Nil), sym)
   }
@@ -913,12 +908,11 @@ class Typer extends Namer with TypeAssigner with Applications with Implicits wit
       if (tree.isType) typedType(tree)(superCtx)
       else {
         val result = typedExpr(tree)(superCtx)
-        if ((cls is Trait) && result.tpe.classSymbol.isRealClass && !ctx.isAfterTyper)
-          ctx.error(s"trait may not call constructor of ${result.tpe.classSymbol}", tree.pos)
+        checkParentCall(result, cls)
         result
       }
 
-    addTypedModifiersAnnotations(cdef, cls)
+    completeAnnotations(cdef, cls)
     val constr1 = typed(constr).asInstanceOf[DefDef]
     val parentsWithClass = ensureFirstIsClass(parents mapconserve typedParent, cdef.pos.toSynthetic)
     val parents1 = ensureConstrCall(cls, parentsWithClass)(superCtx)
@@ -1093,7 +1087,7 @@ class Typer extends Namer with TypeAssigner with Applications with Implicits wit
     try adapt(typedUnadapted(tree, pt), pt, tree)
     catch {
       case ex: CyclicReference => errorTree(tree, cyclicErrorMsg(ex))
-      case ex: FatalTypeError => errorTree(tree, ex.getMessage)
+      case ex: TypeError => errorTree(tree, ex.getMessage)
     }
   }
 
@@ -1285,10 +1279,37 @@ class Typer extends Namer with TypeAssigner with Applications with Implicits wit
       }
     }
 
+    /** If `tp` is a TypeVar which is fully constrained (i.e. its upper bound `hi` conforms
+     *  to its lower bound `lo`), replace `tp` by `hi`. This is necessary to
+     *  keep the right constraints for some implicit search problems. The paradigmatic case
+     *  is `implicitNums.scala`. Without the healing done in `followAlias`, we cannot infer
+     *  implicitly[_3], where _2 is the typelevel number 3. The problem here is that if a
+     *  prototype is, say, Succ[Succ[Zero]], we can infer that it's argument type is Succ[Zero].
+     *  But if the prototype is N? >: Succ[Succ[Zero]] <: Succ[Succ[Zero]], the same
+     *  decomposition does not work - we'd get a N?#M where M is the element type name of Succ
+     *  instead.
+     */
+    def followAlias(tp: Type)(implicit ctx: Context): Type = {
+      val constraint = ctx.typerState.constraint
+      def inst(tp: Type): Type = tp match {
+        case TypeBounds(lo, hi)
+        if (lo eq hi) || (hi <:< lo)(ctx.fresh.setExploreTyperState) =>
+          inst(lo)
+        case tp: PolyParam =>
+          constraint.typeVarOfParam(tp).orElse(tp)
+        case _ => tp
+      }
+      tp match {
+        case tp: TypeVar if constraint.contains(tp) => inst(constraint.entry(tp.origin))
+        case _ => tp
+      }
+    }
+
     def adaptNoArgs(wtp: Type): Tree = wtp match {
       case wtp: ExprType =>
         adaptInterpolated(tree.withType(wtp.resultType), pt, original)
-      case wtp: ImplicitMethodType if constrainResult(wtp, pt) =>
+      case wtp: ImplicitMethodType if constrainResult(wtp, followAlias(pt)) =>
+        val constr = ctx.typerState.constraint
         def addImplicitArgs = {
           def implicitArgError(msg: => String): Tree = {
             ctx.error(msg, tree.pos.endPos)
@@ -1298,14 +1319,15 @@ class Typer extends Namer with TypeAssigner with Applications with Implicits wit
             def where = d"parameter $pname of $methodStr"
             inferImplicit(formal, EmptyTree, tree.pos.endPos) match {
               case SearchSuccess(arg, _, _) =>
-                adapt(arg, formal)
+                arg
               case ambi: AmbiguousImplicits =>
                 implicitArgError(s"ambiguous implicits: ${ambi.explanation} of $where")
               case failure: SearchFailure =>
                 implicitArgError(d"no implicit argument of type $formal found for $where" + failure.postscript)
             }
           }
-          adapt(tpd.Apply(tree, args), pt)
+          if (args.exists(_.isEmpty)) { assert(constr eq ctx.typerState.constraint); tree }
+          else adapt(tpd.Apply(tree, args), pt)
         }
         if ((pt eq WildcardType) || original.isEmpty) addImplicitArgs
         else

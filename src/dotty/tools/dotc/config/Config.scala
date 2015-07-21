@@ -32,6 +32,22 @@ object Config {
    */
   final val checkConstraintsPropagated = false
 
+  /** Check that constraints of globally committable typer states are closed.
+   *  NOTE: When enabled, the check can cause CyclicReference errors because
+   *  it traverses all elements of a type. Such failures were observed when
+   *  compiling all of dotty together (source seems to be in GenBCode which
+   *  accesses javac's settings.)
+   *
+   *  It is recommended to turn this option on only when chasing down
+   *  a PolyParam instantiation error. See comment in Types.TypeVar.instantiate.
+   */
+  final val debugCheckConstraintsClosed = false
+
+  /** Check that no type appearing as the info of a SymDenotation contains
+   *  skolem types.
+   */
+  final val checkNoSkolemsInInfo = false
+
   /** Type comparer will fail with an assert if the upper bound
    *  of a constrained parameter becomes Nothing. This should be turned
    *  on only for specific debugging as normally instantiation to Nothing

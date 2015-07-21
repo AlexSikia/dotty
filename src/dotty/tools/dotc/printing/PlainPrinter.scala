@@ -12,7 +12,7 @@ import typer.Mode
 import scala.annotation.switch
 
 class PlainPrinter(_ctx: Context) extends Printer {
-  protected[this] implicit def ctx: Context = _ctx.fresh.addMode(Mode.Printing)
+  protected[this] implicit def ctx: Context = _ctx.addMode(Mode.Printing)
 
   protected def maxToTextRecursions = 100
 
@@ -120,7 +120,7 @@ class PlainPrinter(_ctx: Context) extends Printer {
       case tp: TermRef if tp.denot.isOverloaded =>
         "<overloaded " ~ toTextRef(tp) ~ ">"
       case tp: SingletonType =>
-        toText(tp.underlying) ~ "(" ~ toTextRef(tp) ~ ")"
+        toTextLocal(tp.underlying) ~ "(" ~ toTextRef(tp) ~ ")"
       case tp: TypeRef =>
         toTextPrefix(tp.prefix) ~ selectionString(tp)
       case tp: RefinedType =>
@@ -223,16 +223,16 @@ class PlainPrinter(_ctx: Context) extends Printer {
       case SuperType(thistpe: SingletonType, _) =>
         toTextRef(thistpe).map(_.replaceAll("""\bthis$""", "super"))
       case SuperType(thistpe, _) =>
-        "Super(" ~ toTextLocal(thistpe) ~ ")"
+        "Super(" ~ toTextGlobal(thistpe) ~ ")"
       case tp @ ConstantType(value) =>
         toText(value)
       case MethodParam(mt, idx) =>
         nameString(mt.paramNames(idx))
-      case sk: SkolemType =>
-        sk.binder match {
-          case rt: RefinedType => s"${nameString(rt.typeSymbol)}{...}.this"
-          case _ => "<skolem>"
-        }
+      case tp: RefinedThis =>
+        s"${nameString(tp.binder.typeSymbol)}{...}.this"
+      case tp: SkolemType =>
+        if (homogenizedView) toText(tp.info)
+        else "<unknown instance of type " ~ toTextGlobal(tp.info) ~ ">"
     }
   }
 

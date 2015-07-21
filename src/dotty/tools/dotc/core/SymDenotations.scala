@@ -1,4 +1,5 @@
-package dotty.tools.dotc
+package dotty.tools
+package dotc
 package core
 
 import Periods._, Contexts._, Symbols._, Denotations._, Names._, NameOps._, Annotations._
@@ -40,7 +41,7 @@ trait SymDenotations { this: Context =>
   }
 
   def stillValid(denot: SymDenotation): Boolean =
-    if (denot is ValidForever) true
+    if (denot.is(ValidForever) || denot.isRefinementClass) true
     else {
       val initial = denot.initial
       if (initial ne denot)
@@ -49,6 +50,7 @@ trait SymDenotations { this: Context =>
         val owner = denot.owner.denot
         stillValid(owner) && (
           !owner.isClass
+          || owner.isRefinementClass
           || (owner.unforcedDecls.lookupAll(denot.name) contains denot.symbol)
           || denot.isSelfSym)
       } catch {
@@ -79,6 +81,7 @@ object SymDenotations {
       super.validFor_=(p)
     }
     */
+    if (Config.checkNoSkolemsInInfo) assertNoSkolems(initInfo)
 
     // ------ Getting and setting fields -----------------------------
 
@@ -113,6 +116,12 @@ object SymDenotations {
 
     /** Unset given flags(s) of this denotation */
     final def resetFlag(flags: FlagSet): Unit = { myFlags &~= flags }
+
+    /** Set applicable flags from `flags` which is a subset of {NoInits, PureInterface} */
+    final def setApplicableFlags(flags: FlagSet): Unit = {
+      val mask = if (myFlags.is(Trait)) NoInitsInterface else NoInits
+      setFlag(flags & mask)
+    }
 
     /** Has this denotation one of the flags in `fs` set? */
     final def is(fs: FlagSet)(implicit ctx: Context) = {
@@ -168,8 +177,8 @@ object SymDenotations {
     }
 
     protected[dotc] final def info_=(tp: Type) = {
-      /*
-      def illegal: String = s"illegal type for $this: $tp"
+      /* // DEBUG
+       def illegal: String = s"illegal type for $this: $tp"
       if (this is Module) // make sure module invariants that allow moduleClass and sourceModule to work are kept.
         tp match {
           case tp: ClassInfo => assert(tp.selfInfo.isInstanceOf[TermRefBySym], illegal)
@@ -178,6 +187,7 @@ object SymDenotations {
           case _ =>
         }
         */
+      if (Config.checkNoSkolemsInInfo) assertNoSkolems(initInfo)
       myInfo = tp
     }
 
@@ -215,6 +225,10 @@ object SymDenotations {
     final def transformAnnotations(f: Annotation => Annotation)(implicit ctx: Context): Unit =
       annotations = annotations.mapConserve(f)
 
+    /** Keep only those annotations that satisfy `p` */
+    final def filterAnnotations(p: Annotation => Boolean)(implicit ctx: Context): Unit =
+      annotations = annotations.filterConserve(p)
+
     /** Optionally, the annotation matching the given class symbol */
     final def getAnnotation(cls: Symbol)(implicit ctx: Context): Option[Annotation] =
       dropOtherAnnotations(annotations, cls) match {
@@ -230,9 +244,9 @@ object SymDenotations {
     final def removeAnnotation(cls: Symbol)(implicit ctx: Context): Unit =
       annotations = myAnnotations.filterNot(_ matches cls)
 
-    /** Copy all annotations from given symbol by adding them to this symbol */
-    final def addAnnotations(from: Symbol)(implicit ctx: Context): Unit =
-      from.annotations.foreach(addAnnotation)
+    /** Add all given annotations to this symbol */
+    final def addAnnotations(annots: TraversableOnce[Annotation])(implicit ctx: Context): Unit =
+      annots.foreach(addAnnotation)
 
     @tailrec
     private def dropOtherAnnotations(anns: List[Annotation], cls: Symbol)(implicit ctx: Context): List[Annotation] = anns match {
@@ -281,6 +295,13 @@ object SymDenotations {
     }
 
     // ------ Names ----------------------------------------------
+
+    /** The expanded name of this denotation. */
+    final def expandedName(implicit ctx: Context) =
+      if (is(ExpandedName) || isConstructor) name
+      else name.expandedName(initial.asSymDenotation.owner)
+        // need to use initial owner to disambiguate, as multiple private symbols with the same name
+        // might have been moved from different origins into the same class
 
     /** The name with which the denoting symbol was created */
     final def originalName(implicit ctx: Context) = {
@@ -496,7 +517,7 @@ object SymDenotations {
         !isAnonymousFunction &&
         !isCompanionMethod
 
-    /** Is this a setter? */
+    /** Is this a getter? */
     final def isGetter(implicit ctx: Context) =
       (this is Accessor) && !originalName.isSetterName && !originalName.isScala2LocalSuffix
 
@@ -510,7 +531,7 @@ object SymDenotations {
     final def isClassConstructor = name == nme.CONSTRUCTOR
 
     /** Is this the constructor of a trait? */
-    final def isImplClassConstructor = name == nme.IMPLCLASS_CONSTRUCTOR
+    final def isImplClassConstructor = name == nme.TRAIT_CONSTRUCTOR
 
     /** Is this the constructor of a trait or a class */
     final def isConstructor = name.isConstructorName
@@ -1038,7 +1059,27 @@ object SymDenotations {
       s"$kindString $name"
     }
 
+    // ----- Sanity checks and debugging */
+
     def debugString = toString + "#" + symbol.id // !!! DEBUG
+
+        def hasSkolems(tp: Type): Boolean = tp match {
+      case tp: SkolemType => true
+      case tp: NamedType => hasSkolems(tp.prefix)
+      case tp: RefinedType => hasSkolems(tp.parent) || hasSkolems(tp.refinedInfo)
+      case tp: PolyType => tp.paramBounds.exists(hasSkolems) || hasSkolems(tp.resType)
+      case tp: MethodType => tp.paramTypes.exists(hasSkolems) || hasSkolems(tp.resType)
+      case tp: ExprType => hasSkolems(tp.resType)
+      case tp: AndOrType => hasSkolems(tp.tp1) || hasSkolems(tp.tp2)
+      case tp: TypeBounds => hasSkolems(tp.lo) || hasSkolems(tp.hi)
+      case tp: AnnotatedType => hasSkolems(tp.tpe)
+      case tp: TypeVar => hasSkolems(tp.inst)
+      case _ => false
+    }
+
+    def assertNoSkolems(tp: Type) =
+      if (!this.isSkolem)
+        assert(!hasSkolems(tp), s"assigning type $tp containing skolems to $this")
 
     // ----- copies and transforms  ----------------------------------------
 
@@ -1077,11 +1118,7 @@ object SymDenotations {
     def ensureNotPrivate(implicit ctx: Context) =
       if (is(Private))
         copySymDenotation(
-          name =
-            if (is(ExpandedName) || isConstructor) this.name
-            else this.name.expandedName(initial.asSymDenotation.owner),
-              // need to use initial owner to disambiguate, as multiple private symbols with the same name
-              // might have been moved from different origins into the same class
+          name = expandedName,
           initFlags = this.flags &~ Private | ExpandedName)
       else this
   }
@@ -1594,8 +1631,11 @@ object SymDenotations {
     override def fullName(implicit ctx: Context): Name = super.fullName
 
     override def primaryConstructor(implicit ctx: Context): Symbol = {
-      val cname = if (this is ImplClass) nme.IMPLCLASS_CONSTRUCTOR else nme.CONSTRUCTOR
-      info.decls.denotsNamed(cname).last.symbol // denotsNamed returns Symbols in reverse order of occurrence
+      def constrNamed(cname: TermName) = info.decls.denotsNamed(cname).last.symbol
+        // denotsNamed returns Symbols in reverse order of occurrence
+      if (this.is(ImplClass)) constrNamed(nme.TRAIT_CONSTRUCTOR) // ignore normal constructor
+      else
+        constrNamed(nme.CONSTRUCTOR).orElse(constrNamed(nme.TRAIT_CONSTRUCTOR))
     }
 
     /** The parameter accessors of this class. Term and type accessors,
@@ -1674,8 +1714,8 @@ object SymDenotations {
     validFor = Period.allInRun(NoRunId) // will be brought forward automatically
   }
 
-  val NoDenotation = new NoDenotation
-  val NotDefinedHereDenotation = new NoDenotation
+  @sharable val NoDenotation = new NoDenotation
+  @sharable val NotDefinedHereDenotation = new NoDenotation
 
   // ---- Completion --------------------------------------------------------
 
@@ -1718,7 +1758,7 @@ object SymDenotations {
   val NoSymbolFn = (ctx: Context) => NoSymbol
 
   /** A missing completer */
-  class NoCompleter extends LazyType {
+  @sharable class NoCompleter extends LazyType {
     def complete(denot: SymDenotation)(implicit ctx: Context): Unit = unsupported("complete")
   }
 

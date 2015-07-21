@@ -1,4 +1,5 @@
-package dotty.tools.dotc.util
+package dotty.tools
+package dotc.util
 
 import Positions.{Position, NoPosition}
 
@@ -10,7 +11,11 @@ case class SourcePosition(source: SourceFile, pos: Position) {
   def exists = pos.exists
 
   def lineContents: String = source.lineContents(point)
+
+  /** The line of the position, starting at 0 */
   def line: Int = source.offsetToLine(point)
+
+  /** The column of the position, starting at 0 */
   def column: Int = source.column(point)
 
   override def toString =
@@ -19,7 +24,7 @@ case class SourcePosition(source: SourceFile, pos: Position) {
 }
 
 /** A sentinel for a non-existing source position */
-object NoSourcePosition extends SourcePosition(NoSource, NoPosition) {
+@sharable object NoSourcePosition extends SourcePosition(NoSource, NoPosition) {
   override def toString = "?"
 }
 

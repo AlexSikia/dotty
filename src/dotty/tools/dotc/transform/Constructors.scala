@@ -30,15 +30,19 @@ class Constructors extends MiniPhaseTransform with SymTransformer { thisTransfor
   import tpd._
 
   override def phaseName: String = "constructors"
-  override def runsAfter: Set[Class[_ <: Phase]] = Set(classOf[Erasure])
+  override def runsAfter: Set[Class[_ <: Phase]] = Set(classOf[Memoize])
 
 
-  /** All initializers should be moved into constructor
-    */
+  /** All initializers for non-lazy fields should be moved into constructor.
+   *  All non-abstract methods should be implemented (this is assured for constructors
+   *  in this phase and for other methods in memoize).
+   */
   override def checkPostCondition(tree: tpd.Tree)(implicit ctx: Context): Unit = {
     tree match {
-      case t: ValDef if ((t.rhs ne EmptyTree) && !(t.symbol is Flags.Lazy) && t.symbol.owner.isClass) =>
-        assert(false, i"$t initializers should be moved to constructors")
+      case tree: ValDef if tree.symbol.exists && tree.symbol.owner.isClass && !tree.symbol.is(Lazy) =>
+        assert(tree.rhs.isEmpty, i"$tree: initializer should be moved to constructors")
+      case tree: DefDef if !tree.symbol.is(LazyOrDeferred) =>
+        assert(!tree.rhs.isEmpty, i"unimplemented: $tree")
       case _ =>
     }
   }
@@ -152,6 +156,20 @@ class Constructors extends MiniPhaseTransform with SymTransformer { thisTransfor
 
     val constrStats, clsStats = new mutable.ListBuffer[Tree]
 
+    /** Map outer getters $outer and outer accessors $A$B$$$outer to the given outer parameter. */
+    def mapOuter(outerParam: Symbol) = new TreeMap {
+      override def transform(tree: Tree)(implicit ctx: Context) = tree match {
+        case Apply(fn, Nil)
+          if (fn.symbol.is(OuterAccessor)
+             || fn.symbol.isGetter && fn.symbol.name == nme.OUTER
+             ) &&
+             fn.symbol.info.resultType.classSymbol == outerParam.info.classSymbol =>
+          ref(outerParam)
+        case _ =>
+          super.transform(tree)
+      }
+    }
+
     // Split class body into statements that go into constructor and
     // definitions that are kept as members of the class.
     def splitStats(stats: List[Tree]): Unit = stats match {
@@ -170,6 +188,8 @@ class Constructors extends MiniPhaseTransform with SymTransformer { thisTransfor
                 owner = constr.symbol).installAfter(thisTransform)
               constrStats += intoConstr(stat, sym)
             }
+          case DefDef(nme.CONSTRUCTOR, _, ((outerParam @ ValDef(nme.OUTER, _, _)) :: _) :: Nil, _, _) =>
+            clsStats += mapOuter(outerParam.symbol).transform(stat)
           case _: DefTree =>
             clsStats += stat
           case _ =>
@@ -217,9 +237,15 @@ class Constructors extends MiniPhaseTransform with SymTransformer { thisTransfor
       case stats => (Nil, stats)
     }
 
+    val mappedSuperCalls = vparams match {
+      case (outerParam @ ValDef(nme.OUTER, _, _)) :: _ =>
+        superCalls.map(mapOuter(outerParam.symbol).transform)
+      case _ => superCalls
+    }
+
     cpy.Template(tree)(
       constr = cpy.DefDef(constr)(
-        rhs = Block(superCalls ::: copyParams ::: followConstrStats, unitLiteral)),
+        rhs = Block(mappedSuperCalls ::: copyParams ::: followConstrStats, unitLiteral)),
       body = clsStats.toList)
   }
 }

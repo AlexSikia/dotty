@@ -18,7 +18,7 @@ case class Mode(val bits: Int) extends AnyVal {
 object Mode {
   val None = Mode(0)
 
-  private var modeName = new Array[String](32)
+  private val modeName = new Array[String](32)
 
   def newMode(bit: Int, name: String): Mode = {
     modeName(bit) = name
@@ -67,6 +67,17 @@ object Mode {
    *  the printing
    */
   val Printing = newMode(10, "Printing")
+
+  /** We are currently typechecking an ident to determine whether some implicit
+   *  is shadowed - don't do any other shadowing tests.
+   */
+  val ImplicitShadowing = newMode(11, "ImplicitShadowing")
+
+  /** We are currently in a `viewExists` check. In that case, ambiguous
+   *  implicits checks are disabled and we succeed with the first implicit
+   *  found.
+   */
+  val ImplicitExploration = newMode(12, "ImplicitExploration")
 
   val PatternOrType = Pattern | Type
 }

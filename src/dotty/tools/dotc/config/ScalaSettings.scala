@@ -81,7 +81,6 @@ class ScalaSettings extends Settings.SettingGroup {
   val Xprintpos = BooleanSetting("-Xprint-pos", "Print tree positions, as offsets.")
   val printtypes = BooleanSetting("-Xprint-types", "Print tree types (debugging option).")
   val prompt = BooleanSetting("-Xprompt", "Display a prompt after each error (debugging option).")
-  val resident = BooleanSetting("-Xresident", "Compiler stays resident: read source filenames from standard input.")
   val script = StringSetting("-Xscript", "object", "Treat the source file as a script and wrap it in a main method.", "")
   val mainClass = StringSetting("-Xmain-class", "path", "Class for manifest's Main-Class entry (only useful with -d <jar>)", "")
   val Xshowcls = StringSetting("-Xshow-class", "class", "Show internal representation of class.", "")
@@ -154,6 +153,7 @@ class ScalaSettings extends Settings.SettingGroup {
   val YtestPickler = BooleanSetting("-Ytest-pickler", "self-test for pickling functionality; should be used with -Ystop-after:pickler")
   val Yspecialize = IntSetting("-Yspecialize","Specialize methods with maximum this amount of polymorphic types.", 0, 0 to 10)
 
+  val YcheckReentrant = BooleanSetting("-Ycheck-reentrant", "check that compiled program does not contain vars that can be accessed from a global root.")
   def stop = YstopAfter
 
   /** Area-specific debug output.

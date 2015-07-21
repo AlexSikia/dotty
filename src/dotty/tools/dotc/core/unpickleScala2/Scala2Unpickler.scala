@@ -438,7 +438,7 @@ class Scala2Unpickler(bytes: Array[Byte], classRoot: ClassDenotation, moduleClas
     }
 
     val name1 = name0.adjustIfModuleClass(flags)
-    val name = if (name1 == nme.IMPLCLASS_CONSTRUCTOR) nme.CONSTRUCTOR else name1
+    val name = if (name1 == nme.TRAIT_CONSTRUCTOR) nme.CONSTRUCTOR else name1
 
     def isClassRoot = (name == classRoot.name) && (owner == classRoot.owner) && !(flags is ModuleClass)
     def isModuleClassRoot = (name == moduleClassRoot.name) && (owner == moduleClassRoot.owner) && (flags is Module)
@@ -689,7 +689,7 @@ class Scala2Unpickler(bytes: Array[Byte], classRoot: ClassDenotation, moduleClas
         else {
           def addRefinement(tp: Type, sym: Symbol) = {
             def subst(info: Type, rt: RefinedType) =
-              if (clazz.isClass) info.substThis(clazz.asClass, SkolemType(rt))
+              if (clazz.isClass) info.substThis(clazz.asClass, RefinedThis(rt))
               else info // turns out some symbols read into `clazz` are not classes, not sure why this is the case.
             RefinedType(tp, sym.name, subst(sym.info, _))
           }

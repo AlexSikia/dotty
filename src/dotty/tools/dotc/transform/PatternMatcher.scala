@@ -60,7 +60,7 @@ class PatternMatcher extends MiniPhaseTransform with DenotTransformer {thisTrans
     val sel = Ident(selector.termRef).withPos(tree.pos)
     val rethrow = tpd.CaseDef(EmptyTree, EmptyTree, Throw(ref(selector)))
     val newCases = tpd.CaseDef(
-      Bind(selector,untpd.Ident(nme.WILDCARD).withPos(tree.pos).withType(selector.info)),
+      Bind(selector, Underscore(selector.info).withPos(tree.pos)),
       EmptyTree,
       transformMatch(tpd.Match(sel, tree.cases ::: rethrow :: Nil)))
     cpy.Try(tree)(tree.expr, newCases :: Nil, tree.finalizer)
@@ -136,7 +136,7 @@ class PatternMatcher extends MiniPhaseTransform with DenotTransformer {thisTrans
         def callDirect   = tgt.select(nme.drop).appliedTo(Literal(Constant(n)))
         def callRuntime  = ref(defn.traversableDropMethod).appliedTo(tgt, Literal(Constant(n)))
 
-        def needsRuntime = tgt.tpe derivesFrom defn.SeqClass /*typeOfMemberNamedDrop(tgt.tpe) == NoType*/
+        def needsRuntime = !(tgt.tpe derivesFrom defn.SeqClass) /*typeOfMemberNamedDrop(tgt.tpe) == NoType*/
 
         if (needsRuntime) callRuntime else callDirect
       }

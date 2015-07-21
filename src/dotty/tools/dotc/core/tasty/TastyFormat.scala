@@ -103,9 +103,8 @@ Standard-Section: "ASTs" TopLevelStat*
                   TERMREFpkg            fullyQualified_NameRef
                   TERMREF               possiblySigned_NameRef qual_Type
                   THIS                  clsRef_Type
-                  SKOLEMtype            refinedType_ASTRef
+                  REFINEDthis           refinedType_ASTRef
                   SHARED                path_ASTRef
-
 
   Constant      = UNITconst
                   FALSEconst
@@ -158,7 +157,6 @@ Standard-Section: "ASTs" TopLevelStat*
                   LAZY
                   OVERRIDE
                   INLINE                // macro
-                  ABSOVERRIDE                     // abstract override
                   STATIC                            // mapped to static Java member
                   OBJECT                            // an object or its class
                   TRAIT                 // a trait
@@ -239,29 +237,28 @@ object TastyFormat {
   final val LAZY = 14
   final val OVERRIDE = 15
   final val INLINE = 16
-  final val ABSOVERRIDE = 17
-  final val STATIC = 18
-  final val OBJECT = 19
-  final val TRAIT = 20
-  final val LOCAL = 21
-  final val SYNTHETIC = 22
-  final val ARTIFACT = 23
-  final val MUTABLE = 24
-  final val LABEL = 25
-  final val FIELDaccessor = 26
-  final val CASEaccessor = 27
-  final val COVARIANT = 28
-  final val CONTRAVARIANT = 29
-  final val SCALA2X = 30
-  final val DEFAULTparameterized = 31
-  final val INSUPERCALL = 32
+  final val STATIC = 17
+  final val OBJECT = 18
+  final val TRAIT = 19
+  final val LOCAL = 20
+  final val SYNTHETIC = 21
+  final val ARTIFACT = 22
+  final val MUTABLE = 23
+  final val LABEL = 24
+  final val FIELDaccessor = 25
+  final val CASEaccessor = 26
+  final val COVARIANT = 27
+  final val CONTRAVARIANT = 28
+  final val SCALA2X = 29
+  final val DEFAULTparameterized = 30
+  final val INSUPERCALL = 31
 
   final val SHARED = 64
   final val TERMREFdirect = 65
   final val TYPEREFdirect = 66
   final val TERMREFpkg = 67
   final val TYPEREFpkg = 68
-  final val SKOLEMtype = 69
+  final val REFINEDthis = 69
   final val BYTEconst = 70
   final val SHORTconst = 71
   final val CHARconst = 72
@@ -350,7 +347,6 @@ object TastyFormat {
        | LAZY
        | OVERRIDE
        | INLINE
-       | ABSOVERRIDE
        | STATIC
        | OBJECT
        | TRAIT
@@ -398,7 +394,6 @@ object TastyFormat {
     case LAZY => "LAZY"
     case OVERRIDE => "OVERRIDE"
     case INLINE => "INLINE"
-    case ABSOVERRIDE => "ABSOVERRIDE"
     case STATIC => "STATIC"
     case OBJECT => "OBJECT"
     case TRAIT => "TRAIT"
@@ -420,7 +415,7 @@ object TastyFormat {
     case TYPEREFdirect => "TYPEREFdirect"
     case TERMREFpkg => "TERMREFpkg"
     case TYPEREFpkg => "TYPEREFpkg"
-    case SKOLEMtype => "SKOLEMtype"
+    case REFINEDthis => "REFINEDthis"
     case BYTEconst => "BYTEconst"
     case SHORTconst => "SHORTconst"
     case CHARconst => "CHARconst"
